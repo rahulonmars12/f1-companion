@@ -1,5 +1,10 @@
 **4/6/2026 Changes**
 
+  What I added defensively:
+  - app/error.tsx: if anything does blow up during a render, you now get a proper "Try again / Reload page" screen instead of a crash
+  - TrackVisual canvas effect is wrapped in try-catch so drawing errors never reach React
+
+
   Track map — replaced the old "all 20 drivers tangled together" path with a single-driver trace sorted by time. The P1 driver's locations for the last 5 minutes are deduplicated and drawn as a smooth
   bezier curve. Once the laps API returns sector times, the track automatically splits into red (S1) / yellow (S2) / purple (S3) segments with boundary markers and a S/F line. A small sector legend sits
   in the top-right corner.
