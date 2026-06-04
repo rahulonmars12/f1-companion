@@ -48,7 +48,7 @@ export default function ContextPanel({
   onClose,
 }: ContextPanelProps) {
   return (
-    <aside className="w-80 shrink-0 border-l border-f1-border bg-f1-panel flex flex-col overflow-hidden">
+    <aside className="w-full md:w-80 md:shrink-0 border-l border-f1-border bg-f1-panel flex flex-col overflow-hidden">
       {mode.type === "idle" && <IdlePanel />}
       {mode.type === "driver" && (
         <DriverPanel
@@ -386,6 +386,87 @@ function BattlePanel({
         </button>
       </div>
 
+      {/* Driver hero photos */}
+      <div className="flex border-b border-f1-border/60 relative overflow-hidden shrink-0">
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `linear-gradient(to right, ${attackerColor}18, transparent 45%, ${defenderColor}18)`,
+          }}
+        />
+        {/* Attacker */}
+        <div className="flex-1 flex flex-col items-center py-4 px-3 relative">
+          {attackerDriver?.headshot_url ? (
+            <img
+              src={attackerDriver.headshot_url}
+              alt={attackerDriver.full_name}
+              className="w-16 h-16 rounded object-cover object-top"
+              style={{ border: `2px solid ${attackerColor}` }}
+            />
+          ) : (
+            <div
+              className="w-16 h-16 rounded flex items-center justify-center font-mono font-black text-xl"
+              style={{
+                border: `2px solid ${attackerColor}`,
+                background: attackerColor + "22",
+                color: attackerColor,
+              }}
+            >
+              {attackerDriver?.name_acronym ?? "?"}
+            </div>
+          )}
+          <div className="mt-2 font-mono font-black text-sm" style={{ color: attackerColor }}>
+            {attackerDriver?.name_acronym ?? "—"}
+          </div>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-yellow-400 mt-0.5">
+            ATTACK
+          </div>
+          {attackerPos && (
+            <div className="text-f1-muted text-[10px] font-mono">P{attackerPos.position}</div>
+          )}
+        </div>
+
+        {/* VS divider */}
+        <div className="flex flex-col items-center justify-center px-2 relative shrink-0">
+          <div className="absolute inset-y-0 w-px bg-f1-border/60" />
+          <div className="bg-f1-panel px-2 py-1 rounded text-[10px] font-mono font-bold text-f1-muted z-10 relative">
+            VS
+          </div>
+        </div>
+
+        {/* Defender */}
+        <div className="flex-1 flex flex-col items-center py-4 px-3 relative">
+          {defenderDriver?.headshot_url ? (
+            <img
+              src={defenderDriver.headshot_url}
+              alt={defenderDriver.full_name}
+              className="w-16 h-16 rounded object-cover object-top"
+              style={{ border: `2px solid ${defenderColor}` }}
+            />
+          ) : (
+            <div
+              className="w-16 h-16 rounded flex items-center justify-center font-mono font-black text-xl"
+              style={{
+                border: `2px solid ${defenderColor}`,
+                background: defenderColor + "22",
+                color: defenderColor,
+              }}
+            >
+              {defenderDriver?.name_acronym ?? "?"}
+            </div>
+          )}
+          <div className="mt-2 font-mono font-black text-sm" style={{ color: defenderColor }}>
+            {defenderDriver?.name_acronym ?? "—"}
+          </div>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-f1-muted mt-0.5">
+            DEFEND
+          </div>
+          {defenderPos && (
+            <div className="text-f1-muted text-[10px] font-mono">P{defenderPos.position}</div>
+          )}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {/* Gap display */}
         <div className="bg-white/5 rounded-lg p-4 text-center border border-f1-border">
@@ -414,28 +495,6 @@ function BattlePanel({
         {history.length > 1 && (
           <GapSparkline history={history} />
         )}
-
-        {/* Driver comparison */}
-        <div className="grid grid-cols-2 gap-2">
-          <DriverCard
-            label="ATTACKING"
-            driver={attackerDriver}
-            pos={attackerPos}
-            car={attackerCar}
-            stint={attackerStint}
-            color={attackerColor}
-            isAttacker
-          />
-          <DriverCard
-            label="DEFENDING"
-            driver={defenderDriver}
-            pos={defenderPos}
-            car={defenderCar}
-            stint={defenderStint}
-            color={defenderColor}
-            isAttacker={false}
-          />
-        </div>
 
         {/* Head-to-head stats */}
         <div className="flex flex-col gap-1">
@@ -579,64 +638,6 @@ function RadioMessage({ radio, teamColor }: { radio: TeamRadio; teamColor: strin
   );
 }
 
-function DriverCard({
-  label,
-  driver,
-  pos,
-  car,
-  stint,
-  color,
-  isAttacker,
-}: {
-  label: string;
-  driver: Driver | undefined;
-  pos: Position | undefined;
-  car: CarData | undefined;
-  stint: Stint | undefined;
-  color: string;
-  isAttacker: boolean;
-}) {
-  return (
-    <div
-      className="rounded-lg p-3 flex flex-col gap-2"
-      style={{ backgroundColor: color + "0d", border: `1px solid ${color}33` }}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-[9px] font-mono text-f1-muted uppercase tracking-wider">
-          {label}
-        </span>
-        {pos && (
-          <span className="text-[10px] font-mono font-bold" style={{ color }}>
-            P{pos.position}
-          </span>
-        )}
-      </div>
-      <div className="font-mono font-black text-lg" style={{ color }}>
-        {driver?.name_acronym ?? "—"}
-      </div>
-      <div className="text-f1-muted text-[10px] font-mono leading-tight">
-        {driver?.team_name ?? "—"}
-      </div>
-      {car && (
-        <div className="text-white/70 text-xs font-mono">{car.speed} km/h</div>
-      )}
-      {stint && (
-        <div className="flex items-center gap-1">
-          <span
-            className="text-[9px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center"
-            style={{
-              color: COMPOUND_COLORS[stint.compound] ?? "#666",
-              border: `1px solid ${COMPOUND_COLORS[stint.compound] ?? "#666"}`,
-            }}
-          >
-            {COMPOUND_LABELS[stint.compound] ?? "?"}
-          </span>
-          <span className="text-f1-muted text-[10px] font-mono">{stint.compound}</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function CompareRow({
   label,

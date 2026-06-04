@@ -106,12 +106,14 @@ export function useDrivers(sessionKey: number | null) {
 
 export function usePositions(sessionKey: number | null, currentTime?: string | null) {
   const live = !currentTime;
-  // Live: stable key (no timestamp) — fetcher injects date> at call time
-  // Historical: key encodes the exact window, changes when user scrubs
+  // Live: use a very large window to capture ALL position changes for the session
+  //       (position data is sparse — only on overtakes — so this stays small)
+  // Historical: no lower bound, fetch everything up to currentTime so all
+  //             20 drivers are visible even in stable, no-overtake phases
   const key = sessionKey
     ? live
-      ? `position?session_key=${sessionKey}&live_window=60`
-      : `position?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -120)}&date<=${currentTime}`
+      ? `position?session_key=${sessionKey}&live_window=86400`
+      : `position?session_key=${sessionKey}&date<=${currentTime}`
     : null;
   const { data } = useSWR<Position[]>(key, fetcher, {
     ...SWR_BASE,

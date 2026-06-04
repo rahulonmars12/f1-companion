@@ -128,6 +128,10 @@ export default function Home() {
     });
   }, [intervals, positions]);
 
+  // ── Mobile tab navigation ─────────────────────────────────────────────────────
+  type MobileTab = "order" | "track" | "detail";
+  const [mobileTab, setMobileTab] = useState<MobileTab>("track");
+
   // ── Context panel ─────────────────────────────────────────────────────────────
   const [panelMode, setPanelMode] = useState<PanelMode>({ type: "idle" });
   const [manualOverride, setManualOverride] = useState(false);
@@ -204,41 +208,75 @@ export default function Home() {
       />
 
       <main className="flex-1 flex overflow-hidden min-h-0">
-        <StandingsPanel
-          drivers={drivers}
-          positions={positions}
-          intervals={intervals}
-          carData={carData}
-          stints={stints}
-          selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
-          battles={battles}
-          onSelectDriver={handleSelectDriver}
-        />
+        {/* Standings — full width on mobile when active, fixed sidebar on desktop */}
+        <div className={`${mobileTab === "order" ? "flex w-full" : "hidden"} md:block md:w-auto`}>
+          <StandingsPanel
+            drivers={drivers}
+            positions={positions}
+            intervals={intervals}
+            carData={carData}
+            stints={stints}
+            selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
+            battles={battles}
+            onSelectDriver={handleSelectDriver}
+          />
+        </div>
 
-        <TrackVisual
-          session={session}
-          drivers={drivers}
-          trackPath={trackPath}
-          sectorFractions={sectorFractions}
-          liveLocations={liveLocations}
-          selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
-          battles={battles}
-          onSelectDriver={handleSelectDriver}
-        />
+        {/* Track — always flex-1, hidden on mobile when other tab active */}
+        <div className={`${mobileTab === "track" ? "flex" : "hidden"} md:flex flex-1 min-w-0`}>
+          <TrackVisual
+            session={session}
+            drivers={drivers}
+            trackPath={trackPath}
+            sectorFractions={sectorFractions}
+            liveLocations={liveLocations}
+            selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
+            battles={battles}
+            onSelectDriver={handleSelectDriver}
+          />
+        </div>
 
-        <ContextPanel
-          mode={panelMode}
-          drivers={drivers}
-          positions={positions}
-          intervals={intervals}
-          carData={carData}
-          stints={stints}
-          radios={radios}
-          sessionKey={sessionKey}
-          gapHistory={gapHistory}
-          onClose={handleClosePanel}
-        />
+        {/* Context panel — full width on mobile when active, fixed sidebar on desktop */}
+        <div className={`${mobileTab === "detail" ? "flex w-full" : "hidden"} md:block md:w-auto`}>
+          <ContextPanel
+            mode={panelMode}
+            drivers={drivers}
+            positions={positions}
+            intervals={intervals}
+            carData={carData}
+            stints={stints}
+            radios={radios}
+            sessionKey={sessionKey}
+            gapHistory={gapHistory}
+            onClose={handleClosePanel}
+          />
+        </div>
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="md:hidden flex shrink-0 border-t border-f1-border bg-f1-panel">
+        {(
+          [
+            { id: "order", label: "Order", icon: "≡" },
+            { id: "track", label: "Track", icon: "◎" },
+            { id: "detail", label: "Detail", icon: "⚡" },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setMobileTab(tab.id)}
+            className={[
+              "flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors",
+              mobileTab === tab.id
+                ? "text-white border-t-2 border-f1-red -mt-px"
+                : "text-f1-muted border-t-2 border-transparent -mt-px",
+            ].join(" ")}
+          >
+            <span className="text-base leading-none">{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </nav>
 
       <TimeControls
         session={session}
