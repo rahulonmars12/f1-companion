@@ -1,4 +1,17 @@
 **4/6/2026 Changes**
+  Feedback fixes
+  - Favourites no longer pinned to top — they just get a gold left border + ★ inline within the sorted race order
+  - Battle indicator is now a subtle yellow dot, no confusing ▲/● icons
+  - Gap column toggle is now GAP (to car ahead) ↔ LEAD (gap to P1), points mode removed
+  - Tyre now shows compound badge + lap age (e.g. M · 12L), no progress bar, no speed
+  - Lap chart only plots drivers who reached top 10, Y-axis is P1–P10
+  - Sector markers are now short perpendicular tick lines with labels pushed outside the track using the outward normal — no more circles confusing with car dots
+  - S/F line is shorter, label placed outside the track the same way
+  
+  Update 2 — new features
+  - Tyre strategy map (Intel tab) — horizontal bars per top-10 driver showing each stint by compound with compound letter inside, lap axis at bottom, current lap marker
+  - Head to Head (Intel tab) — pick any 2 drivers from a driver selector, shows best lap comparison, live speed/throttle bars, and a lap time chart for their last shared laps
+  - Me tab (5th tab, ★) — manage up to 3 favourite drivers from a full grid picker, follows your picks live (position badge), plus an upcoming race calendar with countdown
 
   Track fixes
   - S/F line and S2/S3 sector markers are now fixed — the circuit path locks once 150+ GPS points arrive and won't drift with the leader's position again
