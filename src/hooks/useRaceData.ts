@@ -170,18 +170,62 @@ export function useLocations(sessionKey: number | null, currentTime?: string | n
   }, [data]);
 }
 
-export function useTrackPath(sessionKey: number | null, currentTime?: string | null) {
+// Single driver's sorted location data — produces a clean circuit trace
+// unlike the old useTrackPath that mixed all 20 drivers and created a tangled path.
+export function useReferenceTrack(
+  sessionKey: number | null,
+  driverNumber: number | null,
+  currentTime?: string | null
+) {
   const live = !currentTime;
-  const key = sessionKey
-    ? live
-      ? `location?session_key=${sessionKey}&live_window=300`
-      : `location?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -300)}&date<=${currentTime}`
-    : null;
+  const key =
+    sessionKey && driverNumber
+      ? live
+        ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=300`
+        : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date>=${shiftIso(currentTime!, -300)}&date<=${currentTime}`
+      : null;
   const { data } = useSWR<Location[]>(key, fetcher, {
     ...SWR_BASE,
     refreshInterval: live ? 30_000 : 0,
   });
-  return data ?? [];
+  return useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+    // Deduplicate: skip points within 2 m of the previous kept point
+    const result: Location[] = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = result[result.length - 1];
+      const dx = sorted[i].x - prev.x;
+      const dy = sorted[i].y - prev.y;
+      if (dx * dx + dy * dy > 4) result.push(sorted[i]);
+    }
+    return result;
+  }, [data]);
+}
+
+// Most representative completed lap for a driver — used for sector boundary fractions.
+export function useDriverLap(sessionKey: number | null, driverNumber: number | null) {
+  const { data } = useSWR<Lap[]>(
+    sessionKey && driverNumber
+      ? `laps?session_key=${sessionKey}&driver_number=${driverNumber}`
+      : null,
+    fetcher,
+    { ...SWR_BASE, refreshInterval: 30_000 }
+  );
+  return useMemo(() => {
+    if (!data) return null;
+    const complete = data.filter(
+      (l) =>
+        l.lap_duration != null &&
+        l.duration_sector_1 != null &&
+        l.duration_sector_2 != null &&
+        !l.is_pit_out_lap
+    );
+    if (complete.length === 0) return null;
+    const sorted = [...complete].sort((a, b) => (a.lap_duration ?? 0) - (b.lap_duration ?? 0));
+    // ~40th-percentile lap avoids SC laps (slow) and hot laps (atypical)
+    return sorted[Math.floor(sorted.length * 0.4)] ?? sorted[0];
+  }, [data]);
 }
 
 export function useCarData(sessionKey: number | null, currentTime?: string | null) {

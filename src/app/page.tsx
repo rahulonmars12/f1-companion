@@ -13,7 +13,8 @@ import {
   usePositions,
   useIntervals,
   useLocations,
-  useTrackPath,
+  useReferenceTrack,
+  useDriverLap,
   useCarData,
   useTeamRadio,
   useRaceControl,
@@ -60,14 +61,25 @@ export default function Home() {
 
   const isHistorical = currentTime !== null;
 
+  // ── Effective query time ──────────────────────────────────────────────────────
+  // When the session has ended but we're in "live" mode, live_window=N returns
+  // nothing. Fall back to date_end so all hooks fetch real data.
+  const effectiveQueryTime = useMemo(() => {
+    if (currentTime) return currentTime;
+    if (session?.date_end) {
+      const endMs = new Date(session.date_end).getTime();
+      if (endMs < Date.now() - 120_000) return session.date_end;
+    }
+    return null;
+  }, [currentTime, session?.date_end]);
+
   // ── Race data ─────────────────────────────────────────────────────────────────
   const drivers = useDrivers(sessionKey);
-  const positions = usePositions(sessionKey, currentTime);
-  const { latest: intervals, raw: rawIntervals } = useIntervals(sessionKey, currentTime);
-  const liveLocations = useLocations(sessionKey, currentTime);
-  const trackPath = useTrackPath(sessionKey, currentTime);
-  const carData = useCarData(sessionKey, currentTime);
-  const raceControl = useRaceControl(sessionKey, currentTime);
+  const positions = usePositions(sessionKey, effectiveQueryTime);
+  const { latest: intervals, raw: rawIntervals } = useIntervals(sessionKey, effectiveQueryTime);
+  const liveLocations = useLocations(sessionKey, effectiveQueryTime);
+  const carData = useCarData(sessionKey, effectiveQueryTime);
+  const raceControl = useRaceControl(sessionKey, effectiveQueryTime);
   const gapHistory = useGapHistory(rawIntervals);
 
   // Derive current lap from race_control for historical stint filtering
@@ -78,6 +90,24 @@ export default function Home() {
   }, [raceControl, isHistorical]);
 
   const stints = useStints(sessionKey, currentLap);
+
+  // ── Track path (single driver = clean circuit outline) ────────────────────────
+  const p1DriverNumber = useMemo(() => {
+    for (const [dn, pos] of positions.entries()) {
+      if (pos.position === 1) return dn;
+    }
+    return drivers.size > 0 ? [...drivers.keys()][0] : null;
+  }, [positions, drivers]);
+
+  const trackPath = useReferenceTrack(sessionKey, p1DriverNumber, effectiveQueryTime);
+  const p1Lap = useDriverLap(sessionKey, p1DriverNumber);
+  const sectorFractions = useMemo(() => {
+    if (!p1Lap?.lap_duration || !p1Lap.duration_sector_1 || !p1Lap.duration_sector_2) return null;
+    return {
+      s1: p1Lap.duration_sector_1 / p1Lap.lap_duration,
+      s2: p1Lap.duration_sector_2 / p1Lap.lap_duration,
+    };
+  }, [p1Lap]);
 
   // ── Battle detection ───────────────────────────────────────────────────────────
   const battles = useMemo(() => {
@@ -189,6 +219,7 @@ export default function Home() {
           session={session}
           drivers={drivers}
           trackPath={trackPath}
+          sectorFractions={sectorFractions}
           liveLocations={liveLocations}
           selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
           battles={battles}
