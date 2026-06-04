@@ -1,4 +1,21 @@
 **4/6/2026 Changes**
+Here's a summary of everything just shipped:
+  
+  Smooth car movement — TrackVisual.tsx now uses a persistent requestAnimationFrame loop with LERP=0.1. Cars smoothly interpolate toward new GPS positions every frame rather than jumping. Target
+  positions live in targetRawRef; the display positions in displayRawRef lerp toward them each frame. The track is rendered once to an offscreen canvas and composited each frame — no redundant track
+  redraws.
+
+  All 20 positions visible — usePositions already fixed in the previous session (uses live_window=86400 live, no lower bound historical).
+
+  Battle driver photos — BattlePanel now has a full-width hero section at the top with both drivers' headshots side by side (with team-color borders), their acronym, position, and ATTACK/DEFEND labels.
+
+  Favorite drivers (HAM/SAI) — StandingsPanel shows a sticky "★ Your Picks" section at the top whenever HAM or SAI are in the field. They also get a gold star ★ and a left-border accent throughout the
+  full standings list.
+
+  Mobile layout — Three-tab bottom navigation (Order / Track / Detail) appears on mobile only. Each tab shows the corresponding panel full-width. Desktop layout is unchanged (all three panels
+  side-by-side).
+
+  UI quality — Richer Tailwind tokens (f1.card, f1.border tightened to #222, f1.muted darkened), font antialiasing, thinner scrollbars, fade/slide animations registered.
 
   What I added defensively:
   - app/error.tsx: if anything does blow up during a render, you now get a proper "Try again / Reload page" screen instead of a crash
