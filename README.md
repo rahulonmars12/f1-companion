@@ -1,4 +1,23 @@
 **4/6/2026 Changes**
+
+  Track fixes
+  - S/F line and S2/S3 sector markers are now fixed — the circuit path locks once 150+ GPS points arrive and won't drift with the leader's position again
+  - Green ring around a car dot when DRS / overtake mode is active
+  - Pit lane appears as a grey dashed line labelled "PIT" as soon as any car leaves the racing line (builds up passively during the session)
+
+  Order tab
+  - Small progress bar under each tyre badge — fills toward yellow (in pit window) then red (overdue)
+  - Purple ⬟ diamond next to whoever holds the fastest lap, matching F1 timing convention
+  - Tap GAP → PTS toggle in the header to switch the right column to F1 championship points for each position
+  - Orange alert banner appears at the top for 20 seconds whenever a driver pits, with an undercut threat message if they were within 30s of the car ahead
+
+  Intel tab (mobile only for now)
+  - 4th tab in the bottom nav
+  - Fastest lap card at the top
+  - Full lap chart: every driver
+
+
+
 Here's a summary of everything just shipped:
   
   Smooth car movement — TrackVisual.tsx now uses a persistent requestAnimationFrame loop with LERP=0.1. Cars smoothly interpolate toward new GPS positions every frame rather than jumping. Target
