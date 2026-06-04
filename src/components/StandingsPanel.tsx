@@ -22,6 +22,7 @@ interface StandingsPanelProps {
   currentLap: number | undefined;
   favorites: number[];
   onSelectDriver: (n: number) => void;
+  onToggleFavorite: (n: number) => void;
 }
 
 export default function StandingsPanel({
@@ -37,6 +38,7 @@ export default function StandingsPanel({
   currentLap,
   favorites,
   onSelectDriver,
+  onToggleFavorite,
 }: StandingsPanelProps) {
   const [showLeader, setShowLeader] = useState(false);
 
@@ -104,6 +106,7 @@ export default function StandingsPanel({
               showLeader={showLeader}
               currentLap={currentLap}
               onSelect={onSelectDriver}
+              onToggleFav={() => onToggleFavorite(pos.driver_number)}
             />
           );
         })}
@@ -115,7 +118,7 @@ export default function StandingsPanel({
 function DriverRow({
   pos, driver, interval, car, stint,
   isSelected, isBattling, isFavorite, isFastestLap,
-  showLeader, currentLap, onSelect,
+  showLeader, currentLap, onSelect, onToggleFav,
 }: {
   pos: Position;
   driver: Driver | undefined;
@@ -129,6 +132,7 @@ function DriverRow({
   showLeader: boolean;
   currentLap: number | undefined;
   onSelect: (n: number) => void;
+  onToggleFav: () => void;
 }) {
   const teamColor = driver?.team_colour ? `#${driver.team_colour}` : "#888888";
   const gapSec = parseGapSeconds(interval?.interval);
@@ -147,92 +151,96 @@ function DriverRow({
       const raw = interval?.gap_to_leader;
       return (
         <span className="text-xs font-mono tabular-nums" style={{ color: "#888" }}>
-          {raw ? formatGap(raw) : "—"}
+          {formatGap(raw)}
         </span>
       );
     }
     return (
       <span className="text-xs font-mono tabular-nums" style={{ color: isClose ? "#fbbf24" : "#777" }}>
-        {interval?.interval != null ? formatInterval(interval.interval) : "—"}
+        {interval?.interval != null ? formatGap(interval.interval) : "—"}
       </span>
     );
   };
 
   return (
-    <button
-      onClick={() => onSelect(pos.driver_number)}
+    <div
       className={[
-        "w-full text-left px-3 py-2 border-b border-f1-border/40",
-        "flex items-center gap-3 transition-colors cursor-pointer",
+        "w-full px-2 py-2 border-b border-f1-border/40",
+        "flex items-center gap-2 transition-colors",
         isSelected ? "bg-white/[0.06]"
-          : isBattling ? "bg-yellow-500/[0.04] hover:bg-yellow-500/[0.07]"
-          : "hover:bg-white/[0.03]",
-        isFavorite && !isSelected ? "border-l-2 border-l-f1-accent/60" : "border-l-2 border-l-transparent",
+          : isBattling ? "bg-yellow-500/[0.04]"
+          : "",
+        isFavorite && !isSelected ? "border-l-2 border-l-f1-accent/70" : "border-l-2 border-l-transparent",
       ].join(" ")}
     >
-      {/* Position */}
-      <span
-        className="text-xs font-mono font-bold w-5 text-center shrink-0"
-        style={{ color: pos.position === 1 ? "#ffd700" : pos.position <= 3 ? "#fff" : "#666" }}
+      {/* Clickable driver area */}
+      <button
+        onClick={() => onSelect(pos.driver_number)}
+        className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
       >
-        {pos.position}
-      </span>
+        {/* Position */}
+        <span
+          className="text-xs font-mono font-bold w-5 text-center shrink-0"
+          style={{ color: pos.position === 1 ? "#ffd700" : pos.position <= 3 ? "#fff" : "#666" }}
+        >
+          {pos.position}
+        </span>
 
-      {/* Team stripe */}
-      <span className="w-0.5 h-8 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
+        {/* Team stripe */}
+        <span className="w-0.5 h-7 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
 
-      {/* Driver info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-white text-sm font-mono font-bold tracking-wide">
-            {driver?.name_acronym ?? `#${pos.driver_number}`}
-          </span>
-          {isFavorite && <span className="text-f1-accent text-[10px]">★</span>}
-          {isFastestLap && <span className="text-[9px]" style={{ color: "#a855f7" }}>⬟</span>}
-          {isBattling && (
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
-          )}
+        {/* Driver info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="text-white text-sm font-mono font-bold tracking-wide leading-none">
+              {driver?.name_acronym ?? `#${pos.driver_number}`}
+            </span>
+            {isFastestLap && <span className="text-[9px]" style={{ color: "#a855f7" }}>⬟</span>}
+            {isBattling && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />}
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <div className="flex items-center gap-1">
+              <span
+                className="text-[8px] font-mono font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                style={{
+                  backgroundColor: compoundColor + "20",
+                  color: compoundColor,
+                  border: `1px solid ${compoundColor}55`,
+                }}
+              >
+                {compoundLabel}
+              </span>
+              {tyreAge !== null && (
+                <span className="text-f1-border text-[9px] font-mono tabular-nums">{tyreAge}L</span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="text-f1-muted text-[10px] font-mono truncate mt-0.5">
-          {driver?.team_name ?? "Loading…"}
-        </div>
-      </div>
 
-      {/* Right: gap + tyre */}
-      <div className="flex flex-col items-end gap-0.5 shrink-0">
-        {gapDisplay()}
-        <div className="flex items-center gap-1.5">
-          <span
-            className="text-[9px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center"
-            style={{
-              backgroundColor: compoundColor + "20",
-              color: compoundColor,
-              border: `1px solid ${compoundColor}55`,
-            }}
-          >
-            {compoundLabel}
-          </span>
-          {tyreAge !== null && (
-            <span className="text-f1-muted text-[10px] font-mono tabular-nums">{tyreAge}L</span>
-          )}
+        {/* Gap */}
+        <div className="flex flex-col items-end shrink-0">
+          {gapDisplay()}
         </div>
-      </div>
-    </button>
+      </button>
+
+      {/* Favourite star — separate tap target */}
+      <button
+        onClick={e => { e.stopPropagation(); onToggleFav(); }}
+        className="shrink-0 w-6 h-6 flex items-center justify-center transition-colors"
+        style={{ color: isFavorite ? "#ffd700" : "#2a2a2a" }}
+      >
+        ★
+      </button>
+    </div>
   );
 }
 
-function formatInterval(val: string | number): string {
-  if (typeof val === "number") return `+${val.toFixed(3)}`;
-  if (val.includes("LAP")) return val;
-  const n = parseFloat(val.replace("+", ""));
-  if (isNaN(n)) return val;
-  return `+${n.toFixed(3)}`;
-}
-
-function formatGap(val: string | null): string {
-  if (!val) return "—";
-  if (val.includes("LAP")) return val;
-  const n = parseFloat(val.replace("+", ""));
+function formatGap(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "number") return isNaN(val) ? "—" : `+${val.toFixed(3)}`;
+  const s = String(val);
+  if (s.includes("LAP")) return s;
+  const n = parseFloat(s.replace("+", ""));
   if (isNaN(n)) return "—";
   return `+${n.toFixed(3)}`;
 }

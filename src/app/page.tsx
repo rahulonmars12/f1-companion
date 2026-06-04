@@ -6,7 +6,8 @@ import StandingsPanel from "@/components/StandingsPanel";
 import TrackVisual from "@/components/TrackVisual";
 import ContextPanel, { PanelMode } from "@/components/ContextPanel";
 import IntelPanel from "@/components/IntelPanel";
-import MePanel from "@/components/MePanel";
+import H2HPanel from "@/components/H2HPanel";
+import NewsPanel from "@/components/NewsPanel";
 import SessionSelector from "@/components/SessionSelector";
 import TimeControls from "@/components/TimeControls";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/hooks/useRaceData";
 import { parseGapSeconds, Session } from "@/lib/openf1";
 
-type MobileTab = "order" | "track" | "intel" | "detail" | "me";
+type MobileTab = "order" | "track" | "intel" | "h2h" | "news";
 
 export default function Home() {
   // ── Session ──────────────────────────────────────────────────────────────────
@@ -130,36 +131,6 @@ export default function Home() {
     return { s1: p1Lap.duration_sector_1 / p1Lap.lap_duration, s2: p1Lap.duration_sector_2 / p1Lap.lap_duration };
   }, [p1Lap]);
 
-  // ── Pit lane passive detection ─────────────────────────────────────────────────
-  const [pitLanePath, setPitLanePath] = useState<Array<{ x: number; y: number }>>([]);
-  const pitLaneRef = useRef<Array<{ x: number; y: number }>>([]);
-
-  useEffect(() => {
-    if (trackPath.length < 150) return;
-    const newPts: Array<{ x: number; y: number }> = [];
-    for (const [, loc] of liveLocations.entries()) {
-      let minDistSq = Infinity;
-      for (const pt of trackPath) {
-        const dx = loc.x - pt.x, dy = loc.y - pt.y;
-        const d = dx * dx + dy * dy;
-        if (d < minDistSq) minDistSq = d;
-      }
-      // > 100 units from racing line (≈10m) = likely pit lane
-      if (minDistSq > 100) {
-        const isNew = !pitLaneRef.current.some(p => {
-          const dx = p.x - loc.x, dy = p.y - loc.y;
-          return dx * dx + dy * dy < 25; // within 5m
-        });
-        if (isNew) newPts.push({ x: loc.x, y: loc.y });
-      }
-    }
-    if (newPts.length > 0) {
-      const updated = [...pitLaneRef.current, ...newPts];
-      pitLaneRef.current = updated;
-      setPitLanePath(updated);
-    }
-  }, [liveLocations, trackPath]);
-
   // ── Battle detection ───────────────────────────────────────────────────────────
   const battles = useMemo(() => {
     const result: Array<{ attacker: number; defender: number; gapSec: number }> = [];
@@ -172,9 +143,9 @@ export default function Home() {
       if (!defender) continue;
       result.push({ attacker: dn, defender: defender.driver_number, gapSec });
     }
-    return result.sort((a, b) => {
-      return (positions.get(a.defender)?.position ?? 99) - (positions.get(b.defender)?.position ?? 99);
-    });
+    return result.sort((a, b) =>
+      (positions.get(a.defender)?.position ?? 99) - (positions.get(b.defender)?.position ?? 99)
+    );
   }, [intervals, positions]);
 
   // ── Pit stop / undercut detection ──────────────────────────────────────────────
@@ -192,9 +163,9 @@ export default function Home() {
           const aheadPos = [...positions.values()].find(p => p.position === pos.position - 1);
           const aheadDriver = aheadPos ? drivers.get(aheadPos.driver_number) : null;
           const gapBefore = parseGapSeconds(intervals.get(dn)?.interval);
-          let message = `[PIT] ${driver.name_acronym}`;
+          let message = `${driver.name_acronym}`;
           if (aheadDriver && gapBefore !== null && gapBefore < 30)
-            message += ` → undercut threat vs ${aheadDriver.name_acronym}`;
+            message += ` pits → undercut threat vs ${aheadDriver.name_acronym}`;
           else
             message += ` pits (P${pos.position})`;
           setPitAlert({ driverNumber: dn, message });
@@ -289,11 +260,11 @@ export default function Home() {
   }
 
   const TABS: Array<{ id: MobileTab; label: string; icon: string }> = [
-    { id: "order",  label: "Order",  icon: "≡"  },
-    { id: "track",  label: "Track",  icon: "◎"  },
-    { id: "intel",  label: "Intel",  icon: "⚡" },
-    { id: "detail", label: "Detail", icon: "⚙" },
-    { id: "me",     label: "Me",     icon: "★"  },
+    { id: "order", label: "Order", icon: "≡" },
+    { id: "track", label: "Track", icon: "◎" },
+    { id: "intel", label: "Intel", icon: "⚡" },
+    { id: "h2h",   label: "H2H",   icon: "⚔" },
+    { id: "news",  label: "News",  icon: "★" },
   ];
 
   return (
@@ -321,6 +292,7 @@ export default function Home() {
             currentLap={currentLap}
             favorites={favorites}
             onSelectDriver={handleSelectDriver}
+            onToggleFavorite={toggleFavorite}
           />
         </div>
 
@@ -330,7 +302,6 @@ export default function Home() {
             session={session}
             drivers={drivers}
             trackPath={trackPath}
-            pitLanePath={pitLanePath}
             sectorFractions={sectorFractions}
             liveLocations={liveLocations}
             carData={carData}
@@ -340,34 +311,46 @@ export default function Home() {
           />
         </div>
 
-        {/* Intel (mobile only for now) */}
+        {/* Intel */}
         <div className={`${mobileTab === "intel" ? "flex w-full" : "hidden"} md:hidden`}>
           <IntelPanel
             drivers={drivers}
             positions={positions}
-            allPositions={allPositions}
+            allPositions={allPositions as never}
             allLaps={allLaps}
             allStints={allStints}
-            carData={carData}
             raceControl={raceControl}
+            pitAlert={pitAlert}
             currentTime={effectiveQueryTime}
             currentLap={currentLap}
           />
         </div>
 
-        {/* Me tab */}
-        <div className={`${mobileTab === "me" ? "flex w-full" : "hidden"} md:hidden`}>
-          <MePanel
+        {/* H2H */}
+        <div className={`${mobileTab === "h2h" ? "flex w-full" : "hidden"} md:hidden`}>
+          <H2HPanel
             drivers={drivers}
             positions={positions}
-            favorites={favorites}
-            onToggleFavorite={toggleFavorite}
-            currentSession={session}
+            intervals={intervals}
+            carData={carData}
+            stints={stints}
+            allLaps={allLaps}
+            battles={battles}
+            gapHistory={gapHistory}
+            onSelectDriver={handleSelectDriver}
           />
         </div>
 
-        {/* Context / Detail */}
-        <div className={`${mobileTab === "detail" ? "flex w-full" : "hidden"} md:block md:w-auto`}>
+        {/* News */}
+        <div className={`${mobileTab === "news" ? "flex w-full" : "hidden"} md:hidden`}>
+          <NewsPanel
+            drivers={drivers}
+            positions={positions}
+          />
+        </div>
+
+        {/* Detail sidebar (desktop only) */}
+        <div className="hidden md:block md:w-auto">
           <ContextPanel
             mode={panelMode}
             drivers={drivers}
@@ -413,6 +396,37 @@ export default function Home() {
         onSpeedChange={setPlaySpeed}
         onGoLive={handleGoLive}
       />
+
+      {/* Mobile driver/battle detail overlay */}
+      {panelMode.type !== "idle" && (
+        <div className="md:hidden fixed inset-0 z-50" onClick={handleClosePanel}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="absolute inset-x-0 rounded-t-2xl overflow-hidden bg-f1-panel border-t border-f1-border"
+            style={{ bottom: 52, maxHeight: "75vh" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-2 pb-1 border-b border-f1-border">
+              <div className="w-8 h-1 rounded-full bg-f1-border" />
+            </div>
+            <div style={{ height: "calc(75vh - 24px)", overflow: "auto" }}>
+              <ContextPanel
+                mode={panelMode}
+                drivers={drivers}
+                positions={positions}
+                intervals={intervals}
+                carData={carData}
+                stints={stints}
+                radios={radios}
+                sessionKey={sessionKey}
+                gapHistory={gapHistory}
+                onClose={handleClosePanel}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPicker && (
         <SessionSelector currentSession={session} onSelect={handlePickSession} onClose={() => setShowPicker(false)} />

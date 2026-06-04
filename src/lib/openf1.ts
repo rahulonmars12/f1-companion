@@ -35,8 +35,8 @@ export interface Position {
 export interface Interval {
   date: string;
   driver_number: number;
-  gap_to_leader: string | null;
-  interval: string | null;
+  gap_to_leader: string | number | null;
+  interval: string | number | null;
   session_key: number;
 }
 

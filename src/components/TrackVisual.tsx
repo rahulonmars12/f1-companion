@@ -6,8 +6,7 @@ import { Driver, Location, Session, CarData } from "@/lib/openf1";
 interface TrackVisualProps {
   session: Session | null;
   drivers: Map<number, Driver>;
-  trackPath: Location[];          // locked circuit outline from page.tsx
-  pitLanePath: Array<{ x: number; y: number }>;
+  trackPath: Location[];
   sectorFractions: { s1: number; s2: number } | null;
   liveLocations: Map<number, Location>;
   carData: Map<number, CarData>;
@@ -48,30 +47,13 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: [number, number][]) {
   ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
 }
 
-// Nearest-neighbour sort so scattered pit dots connect into a path
-function sortByProximity(pts: Array<{ x: number; y: number }>) {
-  if (pts.length < 2) return pts;
-  const result = [pts[0]];
-  const rem = pts.slice(1);
-  while (rem.length > 0) {
-    const last = result[result.length - 1];
-    let best = 0, bestD = Infinity;
-    for (let i = 0; i < rem.length; i++) {
-      const d = (rem[i].x - last.x) ** 2 + (rem[i].y - last.y) ** 2;
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    result.push(rem.splice(best, 1)[0]);
-  }
-  return result;
-}
-
-const S1 = "#e8002d", S2 = "#ffd700", S3 = "#8b5cf6";
+// Sector colors — grey/amber/purple so S1 isn't confused with errors
+const S1 = "#64748b", S2 = "#fbbf24", S3 = "#a855f7";
 const LERP = 0.1;
 
 function drawTrack(
   ctx: CanvasRenderingContext2D,
   trackPath: Location[],
-  pitLanePath: Array<{ x: number; y: number }>,
   sectorFractions: { s1: number; s2: number } | null,
   t: Transform,
 ) {
@@ -83,8 +65,7 @@ function drawTrack(
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   tracePath(ctx, pts); ctx.stroke();
 
-  // Sector-coloured surface
-  // Centroid — used for outward label placement
+  // Centroid for outward-facing labels
   const centX = pts.reduce((s, p) => s + p[0], 0) / n;
   const centY = pts.reduce((s, p) => s + p[1], 0) / n;
 
@@ -97,35 +78,34 @@ function drawTrack(
       { slice: pts.slice(s2e) as [number,number][], color: S3 },
     ]) {
       if (slice.length < 2) continue;
-      ctx.beginPath(); ctx.strokeStyle = color + "cc"; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.strokeStyle = color + "dd"; ctx.lineWidth = 6;
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       tracePath(ctx, slice); ctx.stroke();
     }
-    // Sector boundary markers — short perpendicular tick lines, labels outside the track
+
+    // Sector boundary tick lines + outward labels
     for (const { idx, label, color } of [
       { idx: s1e, label: "S2", color: S2 },
       { idx: s2e, label: "S3", color: S3 },
     ]) {
       if (idx <= 0 || idx >= n) continue;
       const [bx, by] = pts[idx];
-      // Smooth direction using points 3 steps away (avoids local jitter)
       const i0 = Math.max(0, idx - 3), i1 = Math.min(n - 1, idx + 3);
       const dx = pts[i1][0] - pts[i0][0], dy = pts[i1][1] - pts[i0][1];
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nx = -dy / len, ny = dx / len; // perpendicular unit vector
-      // Outward = away from centroid
+      const nx = -dy / len, ny = dx / len;
       const inward = nx * (centX - bx) + ny * (centY - by) > 0;
       const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
-      // Tick line (short, perpendicular, both sides of track edge)
+      // Tick
       ctx.beginPath();
       ctx.moveTo(bx - nx * 7, by - ny * 7);
       ctx.lineTo(bx + nx * 7, by + ny * 7);
       ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = "square"; ctx.stroke();
       ctx.lineCap = "round";
-      // Label outside the track
+      // Label outside
       ctx.font = "bold 9px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = color;
-      ctx.fillText(label, bx + outNx * 16, by + outNy * 16);
+      ctx.fillText(label, bx + outNx * 15, by + outNy * 15);
     }
   } else {
     ctx.beginPath(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 6;
@@ -133,44 +113,23 @@ function drawTrack(
     tracePath(ctx, pts); ctx.stroke();
   }
 
-  // Start / finish line — short tick, label outside
+  // S/F — very short tick, label outside
   if (pts.length > 1) {
     const [sfx, sfy] = pts[0];
     const angle = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]);
-    // Perpendicular normal
     const nx = -Math.sin(angle), ny = Math.cos(angle);
     const inward = nx * (centX - sfx) + ny * (centY - sfy) > 0;
     const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
-    // Short tick
     ctx.save(); ctx.translate(sfx, sfy); ctx.rotate(angle + Math.PI / 2);
-    ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke(); ctx.restore();
-    // Label outside
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.lineCap = "square"; ctx.stroke(); ctx.restore();
     ctx.font = "bold 8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillStyle = "#aaa"; ctx.fillText("S/F", sfx + outNx * 14, sfy + outNy * 14);
-  }
-
-  // Pit lane path (accumulated from passive detection)
-  if (pitLanePath.length >= 4) {
-    const sorted = sortByProximity([...pitLanePath]);
-    const pitPts = sorted.map(p => project(p.x, p.y, t));
-    ctx.beginPath();
-    ctx.strokeStyle = "#888";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([5, 5]);
-    ctx.lineCap = "round";
-    pitPts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // PIT label near first point
-    const [lx, ly] = pitPts[0];
-    ctx.font = "bold 8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillStyle = "#888"; ctx.fillText("PIT", lx, ly - 8);
+    ctx.fillStyle = "#999"; ctx.fillText("S/F", sfx + outNx * 13, sfy + outNy * 13);
   }
 }
 
 export default function TrackVisual({
-  session, drivers, trackPath, pitLanePath, sectorFractions,
+  session, drivers, trackPath, sectorFractions,
   liveLocations, carData, selectedDriver, battles, onSelectDriver,
 }: TrackVisualProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -179,12 +138,12 @@ export default function TrackVisual({
 
   const transformRef = useRef<Transform | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
-  const offscreenSizeRef = useRef({ w: 0, h: 0 });
+  const dprRef = useRef(1);
+  const sizeRef = useRef(size);
   const targetRawRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const displayRawRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const rafRef = useRef<number>(0);
 
-  // Mirror refs so the RAF loop always reads fresh data without re-creating itself
   const driversRef = useRef(drivers);
   const selectedDriverRef = useRef(selectedDriver);
   const battlesRef = useRef(battles);
@@ -193,6 +152,7 @@ export default function TrackVisual({
   useEffect(() => { selectedDriverRef.current = selectedDriver; }, [selectedDriver]);
   useEffect(() => { battlesRef.current = battles; }, [battles]);
   useEffect(() => { carDataRef.current = carData; }, [carData]);
+  useEffect(() => { sizeRef.current = size; }, [size]);
 
   // Resize observer
   useEffect(() => {
@@ -206,7 +166,7 @@ export default function TrackVisual({
     return () => ro.disconnect();
   }, []);
 
-  // Update target positions when live locations arrive
+  // Update target positions
   useEffect(() => {
     for (const [dn, loc] of liveLocations.entries()) {
       targetRawRef.current.set(dn, { x: loc.x, y: loc.y });
@@ -215,12 +175,14 @@ export default function TrackVisual({
     }
   }, [liveLocations]);
 
-  // Rebuild offscreen track canvas when track / pit lane / size change
+  // Rebuild offscreen track canvas — DPR-aware for sharp rendering
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = size.w;
-    canvas.height = size.h;
+    const dpr = window.devicePixelRatio || 1;
+    dprRef.current = dpr;
+    canvas.width = size.w * dpr;
+    canvas.height = size.h * dpr;
 
     if (trackPath.length < 10) {
       offscreenRef.current = null;
@@ -232,20 +194,20 @@ export default function TrackVisual({
     transformRef.current = t;
 
     const offscreen = document.createElement("canvas");
-    offscreen.width = size.w;
-    offscreen.height = size.h;
+    offscreen.width = size.w * dpr;
+    offscreen.height = size.h * dpr;
     const ctx = offscreen.getContext("2d");
     if (!ctx) return;
+    ctx.scale(dpr, dpr);
     try {
-      drawTrack(ctx, trackPath, pitLanePath, sectorFractions, t);
+      drawTrack(ctx, trackPath, sectorFractions, t);
     } catch (err) {
       console.error("[TrackVisual] track draw error:", err);
     }
     offscreenRef.current = offscreen;
-    offscreenSizeRef.current = { w: size.w, h: size.h };
-  }, [trackPath, pitLanePath, sectorFractions, size]);
+  }, [trackPath, sectorFractions, size]);
 
-  // Persistent RAF loop — reads everything via refs
+  // Persistent RAF loop
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     function frame() {
@@ -255,21 +217,25 @@ export default function TrackVisual({
         if (canvas) {
           const ctx = canvas.getContext("2d");
           if (ctx) {
+            const dpr = dprRef.current;
+            const { w, h } = sizeRef.current;
+
             for (const [dn, tgt] of targetRawRef.current.entries()) {
               const disp = displayRawRef.current.get(dn);
               if (!disp) { displayRawRef.current.set(dn, { ...tgt }); }
               else { disp.x += (tgt.x - disp.x) * LERP; disp.y += (tgt.y - disp.y) * LERP; }
             }
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
             const offscreen = offscreenRef.current;
 
             if (!offscreen || !t) {
               ctx.fillStyle = "#333"; ctx.font = "13px monospace";
               ctx.textAlign = "center"; ctx.textBaseline = "middle";
-              ctx.fillText("Loading track…", canvas.width / 2, canvas.height / 2);
+              ctx.fillText("Loading track…", w / 2, h / 2);
             } else {
-              ctx.drawImage(offscreen, 0, 0);
+              ctx.drawImage(offscreen, 0, 0, w, h);
               const battleSet = new Set(battlesRef.current.flatMap(b => [b.attacker, b.defender]));
 
               for (const [dn, raw] of displayRawRef.current.entries()) {
@@ -298,7 +264,7 @@ export default function TrackVisual({
                   ctx.fillStyle = g; ctx.fill();
                 }
 
-                // DRS / Overtake-mode ring (outer, green)
+                // Overtake-mode ring (green outer)
                 if (drsActive) {
                   ctx.beginPath(); ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
                   ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 1.5;
@@ -314,6 +280,7 @@ export default function TrackVisual({
                   ctx.strokeStyle = teamColor; ctx.lineWidth = 2; ctx.stroke();
                 }
 
+                // Acronym label — crisp at DPR
                 ctx.font = `bold ${isSelected ? 10 : 8}px monospace`;
                 ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillStyle = isSelected ? teamColor : "#0a0a0a";
@@ -322,7 +289,7 @@ export default function TrackVisual({
                 if (isBattling && !isSelected) {
                   ctx.font = "7px monospace"; ctx.textBaseline = "bottom";
                   ctx.fillStyle = "#fbbf24";
-                  ctx.fillText("⚔", cx, cy - radius - 4);
+                  ctx.fillText("⚔", cx, cy - radius - 3);
                 }
               }
             }
@@ -351,22 +318,22 @@ export default function TrackVisual({
   return (
     <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden relative bg-f1-dark">
       {session && (
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-1 pointer-events-none">
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-0.5 pointer-events-none">
           <span className="text-white/80 text-xs font-mono font-bold tracking-wider">{session.circuit_short_name}</span>
           <span className="text-f1-muted text-[10px] font-mono">{session.country_name} · {session.year}</span>
         </div>
       )}
-      {/* Sector legend + DRS hint */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5 pointer-events-none">
+      {/* Sector legend */}
+      <div className="absolute top-3 right-3 z-10 flex flex-col gap-1 pointer-events-none">
         {([{ label: "S1", color: S1 }, { label: "S2", color: S2 }, { label: "S3", color: S3 }]).map(({ label, color }) => (
           <div key={label} className="flex items-center gap-1.5">
-            <span className="w-4 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-[10px] font-mono" style={{ color }}>{label}</span>
+            <span className="w-3 h-1 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-[9px] font-mono" style={{ color }}>{label}</span>
           </div>
         ))}
-        <div className="flex items-center gap-1.5 mt-1">
-          <span className="w-3 h-3 rounded-full border border-green-500 opacity-70" />
-          <span className="text-[10px] font-mono text-green-500 opacity-70">OT</span>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="w-3 h-3 rounded-full border border-green-500 opacity-60" style={{ fontSize: 0 }} />
+          <span className="text-[9px] font-mono text-green-500 opacity-60">OT</span>
         </div>
       </div>
       <canvas ref={canvasRef} className="w-full h-full cursor-pointer" onClick={handleClick} style={{ display: "block" }} />
