@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import StandingsPanel from "@/components/StandingsPanel";
 import TrackVisual from "@/components/TrackVisual";
 import ContextPanel, { PanelMode } from "@/components/ContextPanel";
+import IntelPanel from "@/components/IntelPanel";
 import SessionSelector from "@/components/SessionSelector";
 import TimeControls from "@/components/TimeControls";
 import {
@@ -20,36 +21,33 @@ import {
   useRaceControl,
   useStints,
   useGapHistory,
+  useAllPositions,
+  useAllLaps,
 } from "@/hooks/useRaceData";
 import { parseGapSeconds, Session } from "@/lib/openf1";
 
+type MobileTab = "order" | "track" | "intel" | "detail";
+
 export default function Home() {
-  // ── Session selection ────────────────────────────────────────────────────────
+  // ── Session ──────────────────────────────────────────────────────────────────
   const { session: liveSession, loading: sessionLoading } = useSession();
   const [pickedSession, setPickedSession] = useState<Session | null>(null);
   const [showPicker, setShowPicker] = useState(false);
-
   const session = pickedSession ?? liveSession;
   const sessionKey = session?.session_key ?? null;
 
-  // Auto-open picker if there's no live session once loading completes
   useEffect(() => {
-    if (!sessionLoading && !liveSession && !pickedSession) {
-      setShowPicker(true);
-    }
+    if (!sessionLoading && !liveSession && !pickedSession) setShowPicker(true);
   }, [sessionLoading, liveSession, pickedSession]);
 
   // ── Time scrubber ─────────────────────────────────────────────────────────────
-  const [currentTime, setCurrentTime] = useState<string | null>(null); // null = live
+  const [currentTime, setCurrentTime] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState<1 | 2 | 5 | 10 | 30>(1);
 
-  // When a historical session is picked, start 15 min in — OpenF1 has no
-  // position data before a session actually begins (formation lap, grid walks, etc.)
   const handlePickSession = useCallback((s: Session) => {
     setPickedSession(s);
-    const fifteenMin = new Date(new Date(s.date_start).getTime() + 15 * 60 * 1000).toISOString();
-    setCurrentTime(fifteenMin);
+    setCurrentTime(new Date(new Date(s.date_start).getTime() + 15 * 60 * 1000).toISOString());
     setIsPlaying(false);
   }, []);
 
@@ -59,11 +57,7 @@ export default function Home() {
     setIsPlaying(false);
   }, []);
 
-  const isHistorical = currentTime !== null;
-
-  // ── Effective query time ──────────────────────────────────────────────────────
-  // When the session has ended but we're in "live" mode, live_window=N returns
-  // nothing. Fall back to date_end so all hooks fetch real data.
+  // ── Effective query time ───────────────────────────────────────────────────────
   const effectiveQueryTime = useMemo(() => {
     if (currentTime) return currentTime;
     if (session?.date_end) {
@@ -81,56 +75,137 @@ export default function Home() {
   const carData = useCarData(sessionKey, effectiveQueryTime);
   const raceControl = useRaceControl(sessionKey, effectiveQueryTime);
   const gapHistory = useGapHistory(rawIntervals);
+  const allPositions = useAllPositions(sessionKey, effectiveQueryTime);
+  const allLaps = useAllLaps(sessionKey);
 
-  // Derive current lap from race_control for historical stint filtering
   const currentLap = useMemo(() => {
-    if (!isHistorical) return undefined;
-    const nums = raceControl.filter((m) => m.lap_number != null).map((m) => m.lap_number!);
+    const nums = raceControl.filter(m => m.lap_number != null).map(m => m.lap_number!);
     return nums.length > 0 ? Math.max(...nums) : undefined;
-  }, [raceControl, isHistorical]);
+  }, [raceControl]);
 
   const stints = useStints(sessionKey, currentLap);
 
-  // ── Track path (single driver = clean circuit outline) ────────────────────────
-  const p1DriverNumber = useMemo(() => {
-    for (const [dn, pos] of positions.entries()) {
-      if (pos.position === 1) return dn;
+  // ── Fastest lap ───────────────────────────────────────────────────────────────
+  const fastestLap = useMemo(() => {
+    return allLaps.reduce<typeof allLaps[0] | null>((best, lap) => {
+      if (!lap.lap_duration) return best;
+      if (!best?.lap_duration || lap.lap_duration < best.lap_duration) return lap;
+      return best;
+    }, null);
+  }, [allLaps]);
+
+  // ── Track path — locked once circuit trace is stable (≥150 pts) ───────────────
+  const rawTrackPath = useReferenceTrack(sessionKey, useMemo(() => {
+    for (const [dn, pos] of positions.entries()) { if (pos.position === 1) return dn; }
+    return drivers.size > 0 ? [...drivers.keys()][0] : null;
+  }, [positions, drivers]), effectiveQueryTime);
+
+  const [lockedTrack, setLockedTrack] = useState(rawTrackPath);
+  const prevSessionKeyRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (prevSessionKeyRef.current !== sessionKey) {
+      prevSessionKeyRef.current = sessionKey;
+      setLockedTrack([]);
+      return;
     }
+    if (lockedTrack.length < 150 && rawTrackPath.length >= 150) {
+      setLockedTrack(rawTrackPath);
+    }
+  }, [rawTrackPath, sessionKey]);
+
+  const trackPath = lockedTrack.length >= 150 ? lockedTrack : rawTrackPath;
+
+  const p1DriverNumber = useMemo(() => {
+    for (const [dn, pos] of positions.entries()) { if (pos.position === 1) return dn; }
     return drivers.size > 0 ? [...drivers.keys()][0] : null;
   }, [positions, drivers]);
 
-  const trackPath = useReferenceTrack(sessionKey, p1DriverNumber, effectiveQueryTime);
   const p1Lap = useDriverLap(sessionKey, p1DriverNumber);
   const sectorFractions = useMemo(() => {
     if (!p1Lap?.lap_duration || !p1Lap.duration_sector_1 || !p1Lap.duration_sector_2) return null;
-    return {
-      s1: p1Lap.duration_sector_1 / p1Lap.lap_duration,
-      s2: p1Lap.duration_sector_2 / p1Lap.lap_duration,
-    };
+    return { s1: p1Lap.duration_sector_1 / p1Lap.lap_duration, s2: p1Lap.duration_sector_2 / p1Lap.lap_duration };
   }, [p1Lap]);
+
+  // ── Pit lane passive detection ─────────────────────────────────────────────────
+  const [pitLanePath, setPitLanePath] = useState<Array<{ x: number; y: number }>>([]);
+  const pitLaneRef = useRef<Array<{ x: number; y: number }>>([]);
+
+  useEffect(() => {
+    if (trackPath.length < 150) return;
+    const newPts: Array<{ x: number; y: number }> = [];
+    for (const [, loc] of liveLocations.entries()) {
+      let minDistSq = Infinity;
+      for (const pt of trackPath) {
+        const dx = loc.x - pt.x, dy = loc.y - pt.y;
+        const d = dx * dx + dy * dy;
+        if (d < minDistSq) minDistSq = d;
+      }
+      // > 100 units from racing line (≈10m) = likely pit lane
+      if (minDistSq > 100) {
+        const isNew = !pitLaneRef.current.some(p => {
+          const dx = p.x - loc.x, dy = p.y - loc.y;
+          return dx * dx + dy * dy < 25; // within 5m
+        });
+        if (isNew) newPts.push({ x: loc.x, y: loc.y });
+      }
+    }
+    if (newPts.length > 0) {
+      const updated = [...pitLaneRef.current, ...newPts];
+      pitLaneRef.current = updated;
+      setPitLanePath(updated);
+    }
+  }, [liveLocations, trackPath]);
 
   // ── Battle detection ───────────────────────────────────────────────────────────
   const battles = useMemo(() => {
     const result: Array<{ attacker: number; defender: number; gapSec: number }> = [];
-    for (const [driverNum, interval] of intervals.entries()) {
-      const pos = positions.get(driverNum);
+    for (const [dn, interval] of intervals.entries()) {
+      const pos = positions.get(dn);
       if (!pos || pos.position === 1) continue;
       const gapSec = parseGapSeconds(interval.interval);
       if (gapSec === null || gapSec >= 1.0) continue;
-      const defender = [...positions.values()].find((p) => p.position === pos.position - 1);
+      const defender = [...positions.values()].find(p => p.position === pos.position - 1);
       if (!defender) continue;
-      result.push({ attacker: driverNum, defender: defender.driver_number, gapSec });
+      result.push({ attacker: dn, defender: defender.driver_number, gapSec });
     }
     return result.sort((a, b) => {
-      const pa = positions.get(a.defender)?.position ?? 99;
-      const pb = positions.get(b.defender)?.position ?? 99;
-      return pa - pb;
+      return (positions.get(a.defender)?.position ?? 99) - (positions.get(b.defender)?.position ?? 99);
     });
   }, [intervals, positions]);
 
-  // ── Mobile tab navigation ─────────────────────────────────────────────────────
-  type MobileTab = "order" | "track" | "detail";
-  const [mobileTab, setMobileTab] = useState<MobileTab>("track");
+  // ── Pit stop / undercut detection ──────────────────────────────────────────────
+  const prevStintNums = useRef<Map<number, number>>(new Map());
+  const [pitAlert, setPitAlert] = useState<{ driverNumber: number; message: string } | null>(null);
+
+  useEffect(() => {
+    const prev = prevStintNums.current;
+    for (const [dn, stint] of stints.entries()) {
+      const prevNum = prev.get(dn) ?? 0;
+      if (prevNum > 0 && stint.stint_number > prevNum) {
+        const driver = drivers.get(dn);
+        const pos = positions.get(dn);
+        if (driver && pos) {
+          const aheadPos = [...positions.values()].find(p => p.position === pos.position - 1);
+          const aheadDriver = aheadPos ? drivers.get(aheadPos.driver_number) : null;
+          const gapBefore = parseGapSeconds(intervals.get(dn)?.interval);
+          let message = `[PIT] ${driver.name_acronym}`;
+          if (aheadDriver && gapBefore !== null && gapBefore < 30)
+            message += ` → undercut threat vs ${aheadDriver.name_acronym}`;
+          else
+            message += ` pits (P${pos.position})`;
+          setPitAlert({ driverNumber: dn, message });
+        }
+      }
+    }
+    prevStintNums.current = new Map([...stints.entries()].map(([dn, s]) => [dn, s.stint_number]));
+  }, [stints]);
+
+  useEffect(() => {
+    if (!pitAlert) return;
+    const t = setTimeout(() => setPitAlert(null), 20_000);
+    return () => clearTimeout(t);
+  }, [pitAlert]);
 
   // ── Context panel ─────────────────────────────────────────────────────────────
   const [panelMode, setPanelMode] = useState<PanelMode>({ type: "idle" });
@@ -146,9 +221,9 @@ export default function Home() {
     }
   }, [battles, manualOverride]);
 
-  const handleSelectDriver = useCallback((driverNumber: number) => {
+  const handleSelectDriver = useCallback((n: number) => {
     setManualOverride(true);
-    setPanelMode({ type: "driver", driverNumber });
+    setPanelMode({ type: "driver", driverNumber: n });
   }, []);
 
   const handleClosePanel = useCallback(() => {
@@ -159,7 +234,10 @@ export default function Home() {
   const radioDriverNumber = panelMode.type === "driver" ? panelMode.driverNumber : null;
   const radios = useTeamRadio(sessionKey, radioDriverNumber, currentTime);
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Mobile tab ────────────────────────────────────────────────────────────────
+  const [mobileTab, setMobileTab] = useState<MobileTab>("track");
+
+  // ── Loading / no-session screens ──────────────────────────────────────────────
   if (sessionLoading && !pickedSession) {
     return (
       <div className="h-dvh flex items-center justify-center bg-f1-dark">
@@ -177,38 +255,35 @@ export default function Home() {
         <div className="text-center max-w-sm">
           <div className="text-f1-red font-mono font-black text-4xl tracking-widest mb-4">F1</div>
           <div className="text-white font-mono text-lg mb-2">No Live Session</div>
-          <div className="text-white/40 font-mono text-sm mb-6">
-            Load a previous race to explore historical data.
-          </div>
-          <button
-            onClick={() => setShowPicker(true)}
-            className="bg-f1-red text-white font-mono font-bold text-sm px-6 py-3 rounded hover:bg-red-700 transition-colors"
-          >
+          <div className="text-white/40 font-mono text-sm mb-6">Load a previous race to explore historical data.</div>
+          <button onClick={() => setShowPicker(true)}
+            className="bg-f1-red text-white font-mono font-bold text-sm px-6 py-3 rounded hover:bg-red-700 transition-colors">
             Browse Sessions
           </button>
         </div>
-        {showPicker && (
-          <SessionSelector
-            currentSession={session}
-            onSelect={handlePickSession}
-            onClose={() => setShowPicker(false)}
-          />
-        )}
+        {showPicker && <SessionSelector currentSession={session} onSelect={handlePickSession} onClose={() => setShowPicker(false)} />}
       </div>
     );
   }
+
+  const TABS: Array<{ id: MobileTab; label: string; icon: string }> = [
+    { id: "order",  label: "Order",  icon: "≡"  },
+    { id: "track",  label: "Track",  icon: "◎"  },
+    { id: "intel",  label: "Intel",  icon: "⚡" },
+    { id: "detail", label: "Detail", icon: "📡" },
+  ];
 
   return (
     <div className="h-dvh flex flex-col bg-f1-dark overflow-hidden safe-layout">
       <Header
         session={session}
         raceControl={raceControl}
-        isHistorical={isHistorical}
+        isHistorical={currentTime !== null}
         onOpenPicker={() => setShowPicker(true)}
       />
 
       <main className="flex-1 flex overflow-hidden min-h-0">
-        {/* Standings — full width on mobile when active, fixed sidebar on desktop */}
+        {/* Standings */}
         <div className={`${mobileTab === "order" ? "flex w-full" : "hidden"} md:block md:w-auto`}>
           <StandingsPanel
             drivers={drivers}
@@ -218,25 +293,41 @@ export default function Home() {
             stints={stints}
             selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
             battles={battles}
+            fastestLapDriverNumber={fastestLap?.driver_number ?? null}
+            pitAlert={pitAlert}
+            currentLap={currentLap}
             onSelectDriver={handleSelectDriver}
           />
         </div>
 
-        {/* Track — always flex-1, hidden on mobile when other tab active */}
+        {/* Track */}
         <div className={`${mobileTab === "track" ? "flex" : "hidden"} md:flex flex-1 min-w-0`}>
           <TrackVisual
             session={session}
             drivers={drivers}
             trackPath={trackPath}
+            pitLanePath={pitLanePath}
             sectorFractions={sectorFractions}
             liveLocations={liveLocations}
+            carData={carData}
             selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
             battles={battles}
             onSelectDriver={handleSelectDriver}
           />
         </div>
 
-        {/* Context panel — full width on mobile when active, fixed sidebar on desktop */}
+        {/* Intel (mobile only for now) */}
+        <div className={`${mobileTab === "intel" ? "flex w-full" : "hidden"} md:hidden`}>
+          <IntelPanel
+            drivers={drivers}
+            allPositions={allPositions}
+            allLaps={allLaps}
+            raceControl={raceControl}
+            currentTime={effectiveQueryTime}
+          />
+        </div>
+
+        {/* Context / Detail */}
         <div className={`${mobileTab === "detail" ? "flex w-full" : "hidden"} md:block md:w-auto`}>
           <ContextPanel
             mode={panelMode}
@@ -253,15 +344,9 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Mobile bottom tab bar */}
+      {/* Mobile tab bar */}
       <nav className="md:hidden flex shrink-0 border-t border-f1-border bg-f1-panel">
-        {(
-          [
-            { id: "order", label: "Order", icon: "≡" },
-            { id: "track", label: "Track", icon: "◎" },
-            { id: "detail", label: "Detail", icon: "⚡" },
-          ] as const
-        ).map((tab) => (
+        {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setMobileTab(tab.id)}
@@ -285,17 +370,13 @@ export default function Home() {
         speed={playSpeed}
         raceControl={raceControl}
         onTimeChange={setCurrentTime}
-        onPlayPause={() => setIsPlaying((p) => !p)}
+        onPlayPause={() => setIsPlaying(p => !p)}
         onSpeedChange={setPlaySpeed}
         onGoLive={handleGoLive}
       />
 
       {showPicker && (
-        <SessionSelector
-          currentSession={session}
-          onSelect={handlePickSession}
-          onClose={() => setShowPicker(false)}
-        />
+        <SessionSelector currentSession={session} onSelect={handlePickSession} onClose={() => setShowPicker(false)} />
       )}
     </div>
   );

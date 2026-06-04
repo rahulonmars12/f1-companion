@@ -180,15 +180,17 @@ export function useReferenceTrack(
   currentTime?: string | null
 ) {
   const live = !currentTime;
+  // Large window so we always capture a full circuit trace without rolling drift.
+  // Historical mode has no lower bound so every lap is represented.
   const key =
     sessionKey && driverNumber
       ? live
-        ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=300`
-        : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date>=${shiftIso(currentTime!, -300)}&date<=${currentTime}`
+        ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=7200`
+        : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date<=${currentTime}`
       : null;
   const { data } = useSWR<Location[]>(key, fetcher, {
     ...SWR_BASE,
-    refreshInterval: live ? 30_000 : 0,
+    refreshInterval: live ? 60_000 : 0,
   });
   return useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -322,6 +324,31 @@ export function useLaps(sessionKey: number | null, driverNumber: number | null) 
     () => [...(data ?? [])].sort((a, b) => a.lap_number - b.lap_number),
     [data]
   );
+}
+
+// All position records for a session — shares SWR cache with usePositions (same key).
+export function useAllPositions(sessionKey: number | null, currentTime?: string | null) {
+  const live = !currentTime;
+  const key = sessionKey
+    ? live
+      ? `position?session_key=${sessionKey}&live_window=86400`
+      : `position?session_key=${sessionKey}&date<=${currentTime}`
+    : null;
+  const { data } = useSWR<Position[]>(key, fetcher, {
+    ...SWR_BASE,
+    refreshInterval: live ? 4_000 : 0,
+  });
+  return useMemo(() => data ?? [], [data]);
+}
+
+// All laps for every driver in the session — used for lap chart and fastest-lap detection.
+export function useAllLaps(sessionKey: number | null) {
+  const { data } = useSWR<Lap[]>(
+    sessionKey ? `laps?session_key=${sessionKey}` : null,
+    fetcher,
+    { ...SWR_BASE, refreshInterval: 15_000 }
+  );
+  return useMemo(() => data ?? [], [data]);
 }
 
 export function useGapHistory(rawIntervals: Interval[]): Map<string, number[]> {
