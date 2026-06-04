@@ -5,6 +5,8 @@ import Header from "@/components/Header";
 import StandingsPanel from "@/components/StandingsPanel";
 import TrackVisual from "@/components/TrackVisual";
 import ContextPanel, { PanelMode } from "@/components/ContextPanel";
+import SessionSelector from "@/components/SessionSelector";
+import TimeControls from "@/components/TimeControls";
 import {
   useSession,
   useDrivers,
@@ -18,57 +20,86 @@ import {
   useStints,
   useGapHistory,
 } from "@/hooks/useRaceData";
-import { parseGapSeconds } from "@/lib/openf1";
+import { parseGapSeconds, Session } from "@/lib/openf1";
 
 export default function Home() {
-  const { session, loading: sessionLoading } = useSession();
+  // ── Session selection ────────────────────────────────────────────────────────
+  const { session: liveSession, loading: sessionLoading } = useSession();
+  const [pickedSession, setPickedSession] = useState<Session | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+
+  const session = pickedSession ?? liveSession;
   const sessionKey = session?.session_key ?? null;
 
+  // Auto-open picker if there's no live session once loading completes
+  useEffect(() => {
+    if (!sessionLoading && !liveSession && !pickedSession) {
+      setShowPicker(true);
+    }
+  }, [sessionLoading, liveSession, pickedSession]);
+
+  // ── Time scrubber ─────────────────────────────────────────────────────────────
+  const [currentTime, setCurrentTime] = useState<string | null>(null); // null = live
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playSpeed, setPlaySpeed] = useState<1 | 2 | 5 | 10 | 30>(1);
+
+  // When a historical session is picked, start from its beginning
+  const handlePickSession = useCallback((s: Session) => {
+    setPickedSession(s);
+    setCurrentTime(s.date_start);
+    setIsPlaying(false);
+  }, []);
+
+  const handleGoLive = useCallback(() => {
+    setCurrentTime(null);
+    setPickedSession(null);
+    setIsPlaying(false);
+  }, []);
+
+  const isHistorical = currentTime !== null;
+
+  // ── Race data ─────────────────────────────────────────────────────────────────
   const drivers = useDrivers(sessionKey);
-  const positions = usePositions(sessionKey);
-  const intervals = useIntervals(sessionKey);
-  const liveLocations = useLocations(sessionKey);
-  const trackPath = useTrackPath(sessionKey);
-  const carData = useCarData(sessionKey);
-  const raceControl = useRaceControl(sessionKey);
-  const stints = useStints(sessionKey);
-  const gapHistory = useGapHistory(intervals);
+  const positions = usePositions(sessionKey, currentTime);
+  const { latest: intervals, raw: rawIntervals } = useIntervals(sessionKey, currentTime);
+  const liveLocations = useLocations(sessionKey, currentTime);
+  const trackPath = useTrackPath(sessionKey, currentTime);
+  const carData = useCarData(sessionKey, currentTime);
+  const raceControl = useRaceControl(sessionKey, currentTime);
+  const gapHistory = useGapHistory(rawIntervals);
 
-  const [panelMode, setPanelMode] = useState<PanelMode>({ type: "idle" });
-  const [manualOverride, setManualOverride] = useState(false);
+  // Derive current lap from race_control for historical stint filtering
+  const currentLap = useMemo(() => {
+    if (!isHistorical) return undefined;
+    const nums = raceControl.filter((m) => m.lap_number != null).map((m) => m.lap_number!);
+    return nums.length > 0 ? Math.max(...nums) : undefined;
+  }, [raceControl, isHistorical]);
 
-  // Detect battles (gap < 1s), sorted by defender position (highest = most important)
+  const stints = useStints(sessionKey, currentLap);
+
+  // ── Battle detection ───────────────────────────────────────────────────────────
   const battles = useMemo(() => {
     const result: Array<{ attacker: number; defender: number; gapSec: number }> = [];
-
     for (const [driverNum, interval] of intervals.entries()) {
       const pos = positions.get(driverNum);
       if (!pos || pos.position === 1) continue;
       const gapSec = parseGapSeconds(interval.interval);
       if (gapSec === null || gapSec >= 1.0) continue;
-
-      // Find the defender (car directly ahead = position - 1)
-      const defenderEntry = [...positions.values()].find(
-        (p) => p.position === pos.position - 1
-      );
-      if (!defenderEntry) continue;
-
-      result.push({
-        attacker: driverNum,
-        defender: defenderEntry.driver_number,
-        gapSec,
-      });
+      const defender = [...positions.values()].find((p) => p.position === pos.position - 1);
+      if (!defender) continue;
+      result.push({ attacker: driverNum, defender: defender.driver_number, gapSec });
     }
-
-    // Sort by defender position (lower position number = more important battle)
     return result.sort((a, b) => {
-      const posA = positions.get(a.defender)?.position ?? 99;
-      const posB = positions.get(b.defender)?.position ?? 99;
-      return posA - posB;
+      const pa = positions.get(a.defender)?.position ?? 99;
+      const pb = positions.get(b.defender)?.position ?? 99;
+      return pa - pb;
     });
   }, [intervals, positions]);
 
-  // Auto-switch to battle mode if no manual override
+  // ── Context panel ─────────────────────────────────────────────────────────────
+  const [panelMode, setPanelMode] = useState<PanelMode>({ type: "idle" });
+  const [manualOverride, setManualOverride] = useState(false);
+
   useEffect(() => {
     if (manualOverride) return;
     if (battles.length > 0) {
@@ -89,17 +120,16 @@ export default function Home() {
     setPanelMode({ type: "idle" });
   }, []);
 
-  // Determine which driver's radio to fetch
-  const radioDriverNumber =
-    panelMode.type === "driver" ? panelMode.driverNumber : null;
-  const radios = useTeamRadio(sessionKey, radioDriverNumber);
+  const radioDriverNumber = panelMode.type === "driver" ? panelMode.driverNumber : null;
+  const radios = useTeamRadio(sessionKey, radioDriverNumber, currentTime);
 
-  if (sessionLoading) {
+  // ── Render ────────────────────────────────────────────────────────────────────
+  if (sessionLoading && !pickedSession) {
     return (
       <div className="h-screen flex items-center justify-center bg-f1-dark">
         <div className="text-center">
           <div className="text-f1-red font-mono font-black text-4xl tracking-widest mb-4">F1</div>
-          <div className="text-white/60 font-mono text-sm">Loading session…</div>
+          <div className="text-white/60 font-mono text-sm">Loading…</div>
         </div>
       </div>
     );
@@ -111,17 +141,35 @@ export default function Home() {
         <div className="text-center max-w-sm">
           <div className="text-f1-red font-mono font-black text-4xl tracking-widest mb-4">F1</div>
           <div className="text-white font-mono text-lg mb-2">No Live Session</div>
-          <div className="text-white/40 font-mono text-sm">
-            Check back when a practice, qualifying, or race session is active.
+          <div className="text-white/40 font-mono text-sm mb-6">
+            Load a previous race to explore historical data.
           </div>
+          <button
+            onClick={() => setShowPicker(true)}
+            className="bg-f1-red text-white font-mono font-bold text-sm px-6 py-3 rounded hover:bg-red-700 transition-colors"
+          >
+            Browse Sessions
+          </button>
         </div>
+        {showPicker && (
+          <SessionSelector
+            currentSession={session}
+            onSelect={handlePickSession}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="h-screen flex flex-col bg-f1-dark overflow-hidden">
-      <Header session={session} raceControl={raceControl} />
+      <Header
+        session={session}
+        raceControl={raceControl}
+        isHistorical={isHistorical}
+        onOpenPicker={() => setShowPicker(true)}
+      />
 
       <main className="flex-1 flex overflow-hidden min-h-0">
         <StandingsPanel
@@ -130,9 +178,7 @@ export default function Home() {
           intervals={intervals}
           carData={carData}
           stints={stints}
-          selectedDriver={
-            panelMode.type === "driver" ? panelMode.driverNumber : null
-          }
+          selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
           battles={battles}
           onSelectDriver={handleSelectDriver}
         />
@@ -142,9 +188,7 @@ export default function Home() {
           drivers={drivers}
           trackPath={trackPath}
           liveLocations={liveLocations}
-          selectedDriver={
-            panelMode.type === "driver" ? panelMode.driverNumber : null
-          }
+          selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
           battles={battles}
           onSelectDriver={handleSelectDriver}
         />
@@ -162,6 +206,26 @@ export default function Home() {
           onClose={handleClosePanel}
         />
       </main>
+
+      <TimeControls
+        session={session}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        speed={playSpeed}
+        raceControl={raceControl}
+        onTimeChange={setCurrentTime}
+        onPlayPause={() => setIsPlaying((p) => !p)}
+        onSpeedChange={setPlaySpeed}
+        onGoLive={handleGoLive}
+      />
+
+      {showPicker && (
+        <SessionSelector
+          currentSession={session}
+          onSelect={handlePickSession}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </div>
   );
 }

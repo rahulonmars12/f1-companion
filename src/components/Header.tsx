@@ -6,9 +6,11 @@ import { FLAG_COLORS, FLAG_LABELS } from "@/lib/constants";
 interface HeaderProps {
   session: Session | null;
   raceControl: RaceControl[];
+  isHistorical?: boolean;
+  onOpenPicker?: () => void;
 }
 
-export default function Header({ session, raceControl }: HeaderProps) {
+export default function Header({ session, raceControl, isHistorical, onOpenPicker }: HeaderProps) {
   const latestFlag = raceControl.find((m) => m.flag && m.category === "Flag");
   const flagColor = latestFlag?.flag ? FLAG_COLORS[latestFlag.flag] ?? "#888" : "#39b54a";
   const flagLabel = latestFlag?.flag ? FLAG_LABELS[latestFlag.flag] ?? latestFlag.flag : "TRACK CLEAR";
@@ -51,9 +53,26 @@ export default function Header({ session, raceControl }: HeaderProps) {
             {flagLabel}
           </span>
         </div>
+        {onOpenPicker && (
+          <button
+            onClick={onOpenPicker}
+            className="text-f1-muted hover:text-white text-xs font-mono border border-f1-border hover:border-white/30 px-2.5 py-1 rounded transition-colors"
+          >
+            Sessions ▾
+          </button>
+        )}
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-f1-red animate-pulse" />
-          <span className="text-f1-red text-xs font-mono font-bold tracking-widest">LIVE</span>
+          {isHistorical ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+              <span className="text-yellow-500 text-xs font-mono font-bold tracking-widest">REPLAY</span>
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-f1-red animate-pulse" />
+              <span className="text-f1-red text-xs font-mono font-bold tracking-widest">LIVE</span>
+            </>
+          )}
         </div>
       </div>
     </header>
