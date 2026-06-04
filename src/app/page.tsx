@@ -162,7 +162,7 @@ export default function Home() {
   // ── Render ────────────────────────────────────────────────────────────────────
   if (sessionLoading && !pickedSession) {
     return (
-      <div className="h-screen flex items-center justify-center bg-f1-dark">
+      <div className="h-dvh flex items-center justify-center bg-f1-dark">
         <div className="text-center">
           <div className="text-f1-red font-mono font-black text-4xl tracking-widest mb-4">F1</div>
           <div className="text-white/60 font-mono text-sm">Loading…</div>
@@ -173,7 +173,7 @@ export default function Home() {
 
   if (!session) {
     return (
-      <div className="h-screen flex items-center justify-center bg-f1-dark">
+      <div className="h-dvh flex items-center justify-center bg-f1-dark">
         <div className="text-center max-w-sm">
           <div className="text-f1-red font-mono font-black text-4xl tracking-widest mb-4">F1</div>
           <div className="text-white font-mono text-lg mb-2">No Live Session</div>
@@ -199,7 +199,7 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-f1-dark overflow-hidden">
+    <div className="h-dvh flex flex-col bg-f1-dark overflow-hidden safe-layout">
       <Header
         session={session}
         raceControl={raceControl}

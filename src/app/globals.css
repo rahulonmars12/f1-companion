@@ -38,3 +38,9 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #222 transparent;
 }
+
+/* Safe area padding for PWA / notch devices */
+.safe-layout {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
