@@ -156,7 +156,8 @@ export default function StandingsPanel({
   );
 }
 
-function formatInterval(val: string): string {
+function formatInterval(val: string | number): string {
+  if (typeof val === "number") return `+${val.toFixed(3)}`;
   if (val.includes("LAP")) return val;
   const n = parseFloat(val.replace("+", ""));
   if (isNaN(n)) return val;

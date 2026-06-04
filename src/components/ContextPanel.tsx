@@ -353,7 +353,8 @@ function BattlePanel({
   const defenderStint = stints.get(defender);
   const interval = intervals.get(attacker);
 
-  const gapSec = parseFloat((interval?.interval ?? "0").replace("+", ""));
+  const rawGap = interval?.interval ?? 0;
+  const gapSec = typeof rawGap === "number" ? rawGap : parseFloat((rawGap as string).replace("+", ""));
   const history = gapHistory.get(String(attacker)) ?? [];
   const trend =
     history.length >= 3
@@ -718,7 +719,8 @@ function GapSparkline({ history }: { history: number[] }) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatInterval(val: string): string {
+function formatInterval(val: string | number): string {
+  if (typeof val === "number") return `+${val.toFixed(3)}`;
   if (val.includes("LAP")) return val;
   const n = parseFloat(val.replace("+", ""));
   if (isNaN(n)) return val;

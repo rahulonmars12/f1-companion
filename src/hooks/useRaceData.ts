@@ -328,7 +328,8 @@ export function useGapHistory(rawIntervals: Interval[]): Map<string, number[]> {
     const sorted = [...rawIntervals].sort((a, b) => a.date.localeCompare(b.date));
     for (const i of sorted) {
       if (i.interval) {
-        const val = parseFloat(i.interval.replace("+", ""));
+        const raw = i.interval;
+        const val = typeof raw === "number" ? raw : parseFloat((raw as string).replace("+", ""));
         if (!isNaN(val)) {
           const key = String(i.driver_number);
           const arr = history.get(key) ?? [];

@@ -116,7 +116,9 @@ export async function apiFetch<T>(path: string, params: Record<string, string | 
   return res.json();
 }
 
-export function parseGapSeconds(val: string | null | undefined): number | null {
+export function parseGapSeconds(val: string | number | null | undefined): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === "number") return isNaN(val) ? null : val;
   if (!val || val === "+INF" || val === "INF") return null;
   const cleaned = val.replace("+", "").replace("LAP", "").trim();
   if (cleaned.includes("LAP")) return 999;
