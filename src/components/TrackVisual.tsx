@@ -103,6 +103,8 @@ export default function TrackVisual({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    try {
+
     canvas.width = size.w;
     canvas.height = size.h;
     ctx.clearRect(0, 0, size.w, size.h);
@@ -267,6 +269,10 @@ export default function TrackVisual({
         ctx.fillStyle = "#fbbf24";
         ctx.fillText("⚔", cx, cy - radius - 4);
       }
+    }
+
+    } catch (err) {
+      console.error("[TrackVisual] draw error:", err);
     }
   }, [trackPath, sectorFractions, liveLocations, drivers, selectedDriver, battles, size]);
 
