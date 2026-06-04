@@ -75,21 +75,28 @@ export default function LapChart({ allPositions, raceControl, drivers, currentTi
   }
 
   const maxLap = Math.max(...lapBoundaries.map(b => b.lap));
-  const W = 320, H = 260;
-  const PL = 26, PR = 14, PT = 8, PB = 18;
+  const W = 320, H = 220;
+  const PL = 22, PR = 14, PT = 8, PB = 18;
   const plotW = W - PL - PR, plotH = H - PT - PB;
-  const MAX_POS = 20;
+  const MAX_POS = 10;
 
   const xScale = (lap: number) => PL + ((lap - 1) / Math.max(1, maxLap - 1)) * plotW;
   const yScale = (pos: number) => PT + ((pos - 1) / (MAX_POS - 1)) * plotH;
 
-  const driverNumbers = [...byDriver.keys()];
+  // Only show drivers who reached top 10 at some point
+  const driverNumbers = [...byDriver.keys()].filter(dn => {
+    for (const snap of lapGrid.values()) {
+      const p = snap.get(dn);
+      if (p !== undefined && p <= MAX_POS) return true;
+    }
+    return false;
+  });
 
   return (
     <div className="w-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H, maxHeight: H }}>
         {/* Grid lines */}
-        {[1, 5, 10, 15, 20].map(pos => (
+        {[1, 3, 5, 7, 10].map(pos => (
           <g key={pos}>
             <line x1={PL} y1={yScale(pos)} x2={W - PR} y2={yScale(pos)} stroke="#1e1e1e" strokeWidth={0.8} />
             <text x={PL - 3} y={yScale(pos) + 3} fontSize={6.5} fill="#444" textAnchor="end" fontFamily="monospace">

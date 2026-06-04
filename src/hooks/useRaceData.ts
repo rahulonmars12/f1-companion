@@ -351,6 +351,30 @@ export function useAllLaps(sessionKey: number | null) {
   return useMemo(() => data ?? [], [data]);
 }
 
+// All stints for every driver — shares SWR cache with useStints (same key).
+export function useAllStints(sessionKey: number | null) {
+  const { data } = useSWR<Stint[]>(
+    sessionKey ? `stints?session_key=${sessionKey}` : null,
+    fetcher,
+    { ...SWR_BASE, refreshInterval: 15_000 }
+  );
+  return useMemo(() => data ?? [], [data]);
+}
+
+// Race sessions for current and next year — used for the calendar view.
+export function useCalendar() {
+  const year = new Date().getFullYear();
+  const { data: y0 } = useSWR<Session[]>(`sessions?year=${year}&session_type=Race`, fetcher, {
+    ...SWR_BASE, refreshInterval: 0,
+  });
+  const { data: y1 } = useSWR<Session[]>(`sessions?year=${year + 1}&session_type=Race`, fetcher, {
+    ...SWR_BASE, refreshInterval: 0,
+  });
+  return useMemo(() => {
+    return [...(y0 ?? []), ...(y1 ?? [])].sort((a, b) => a.date_start.localeCompare(b.date_start));
+  }, [y0, y1]);
+}
+
 export function useGapHistory(rawIntervals: Interval[]): Map<string, number[]> {
   return useMemo(() => {
     const history = new Map<string, number[]>();

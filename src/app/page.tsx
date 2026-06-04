@@ -6,6 +6,7 @@ import StandingsPanel from "@/components/StandingsPanel";
 import TrackVisual from "@/components/TrackVisual";
 import ContextPanel, { PanelMode } from "@/components/ContextPanel";
 import IntelPanel from "@/components/IntelPanel";
+import MePanel from "@/components/MePanel";
 import SessionSelector from "@/components/SessionSelector";
 import TimeControls from "@/components/TimeControls";
 import {
@@ -23,10 +24,11 @@ import {
   useGapHistory,
   useAllPositions,
   useAllLaps,
+  useAllStints,
 } from "@/hooks/useRaceData";
 import { parseGapSeconds, Session } from "@/lib/openf1";
 
-type MobileTab = "order" | "track" | "intel" | "detail";
+type MobileTab = "order" | "track" | "intel" | "detail" | "me";
 
 export default function Home() {
   // ── Session ──────────────────────────────────────────────────────────────────
@@ -77,6 +79,7 @@ export default function Home() {
   const gapHistory = useGapHistory(rawIntervals);
   const allPositions = useAllPositions(sessionKey, effectiveQueryTime);
   const allLaps = useAllLaps(sessionKey);
+  const allStints = useAllStints(sessionKey);
 
   const currentLap = useMemo(() => {
     const nums = raceControl.filter(m => m.lap_number != null).map(m => m.lap_number!);
@@ -234,6 +237,25 @@ export default function Home() {
   const radioDriverNumber = panelMode.type === "driver" ? panelMode.driverNumber : null;
   const radios = useTeamRadio(sessionKey, radioDriverNumber, currentTime);
 
+  // ── Favourites ────────────────────────────────────────────────────────────────
+  const [favorites, setFavorites] = useState<number[]>([]);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("f1-favorites");
+      if (stored) setFavorites(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleFavorite = useCallback((dn: number) => {
+    setFavorites(prev => {
+      const next = prev.includes(dn)
+        ? prev.filter(n => n !== dn)
+        : prev.length < 3 ? [...prev, dn] : prev;
+      localStorage.setItem("f1-favorites", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   // ── Mobile tab ────────────────────────────────────────────────────────────────
   const [mobileTab, setMobileTab] = useState<MobileTab>("track");
 
@@ -270,7 +292,8 @@ export default function Home() {
     { id: "order",  label: "Order",  icon: "≡"  },
     { id: "track",  label: "Track",  icon: "◎"  },
     { id: "intel",  label: "Intel",  icon: "⚡" },
-    { id: "detail", label: "Detail", icon: "📡" },
+    { id: "detail", label: "Detail", icon: "⚙" },
+    { id: "me",     label: "Me",     icon: "★"  },
   ];
 
   return (
@@ -296,6 +319,7 @@ export default function Home() {
             fastestLapDriverNumber={fastestLap?.driver_number ?? null}
             pitAlert={pitAlert}
             currentLap={currentLap}
+            favorites={favorites}
             onSelectDriver={handleSelectDriver}
           />
         </div>
@@ -320,10 +344,25 @@ export default function Home() {
         <div className={`${mobileTab === "intel" ? "flex w-full" : "hidden"} md:hidden`}>
           <IntelPanel
             drivers={drivers}
+            positions={positions}
             allPositions={allPositions}
             allLaps={allLaps}
+            allStints={allStints}
+            carData={carData}
             raceControl={raceControl}
             currentTime={effectiveQueryTime}
+            currentLap={currentLap}
+          />
+        </div>
+
+        {/* Me tab */}
+        <div className={`${mobileTab === "me" ? "flex w-full" : "hidden"} md:hidden`}>
+          <MePanel
+            drivers={drivers}
+            positions={positions}
+            favorites={favorites}
+            onToggleFavorite={toggleFavorite}
+            currentSession={session}
           />
         </div>
 

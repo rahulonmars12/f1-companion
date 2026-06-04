@@ -84,6 +84,10 @@ function drawTrack(
   tracePath(ctx, pts); ctx.stroke();
 
   // Sector-coloured surface
+  // Centroid — used for outward label placement
+  const centX = pts.reduce((s, p) => s + p[0], 0) / n;
+  const centY = pts.reduce((s, p) => s + p[1], 0) / n;
+
   if (sectorFractions) {
     const s1e = Math.min(Math.floor(n * sectorFractions.s1), n - 1);
     const s2e = Math.min(Math.floor(n * (sectorFractions.s1 + sectorFractions.s2)), n - 1);
@@ -97,19 +101,31 @@ function drawTrack(
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       tracePath(ctx, slice); ctx.stroke();
     }
-    // Sector boundary markers
+    // Sector boundary markers — short perpendicular tick lines, labels outside the track
     for (const { idx, label, color } of [
       { idx: s1e, label: "S2", color: S2 },
       { idx: s2e, label: "S3", color: S3 },
     ]) {
       if (idx <= 0 || idx >= n) continue;
       const [bx, by] = pts[idx];
-      ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.fill();
-      ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2);
-      ctx.strokeStyle = "#000"; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.font = "bold 10px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-      ctx.fillStyle = color; ctx.fillText(label, bx, by - 9);
+      // Smooth direction using points 3 steps away (avoids local jitter)
+      const i0 = Math.max(0, idx - 3), i1 = Math.min(n - 1, idx + 3);
+      const dx = pts[i1][0] - pts[i0][0], dy = pts[i1][1] - pts[i0][1];
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = -dy / len, ny = dx / len; // perpendicular unit vector
+      // Outward = away from centroid
+      const inward = nx * (centX - bx) + ny * (centY - by) > 0;
+      const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
+      // Tick line (short, perpendicular, both sides of track edge)
+      ctx.beginPath();
+      ctx.moveTo(bx - nx * 7, by - ny * 7);
+      ctx.lineTo(bx + nx * 7, by + ny * 7);
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = "square"; ctx.stroke();
+      ctx.lineCap = "round";
+      // Label outside the track
+      ctx.font = "bold 9px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = color;
+      ctx.fillText(label, bx + outNx * 16, by + outNy * 16);
     }
   } else {
     ctx.beginPath(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 6;
@@ -117,15 +133,21 @@ function drawTrack(
     tracePath(ctx, pts); ctx.stroke();
   }
 
-  // Start / finish line
+  // Start / finish line — short tick, label outside
   if (pts.length > 1) {
     const [sfx, sfy] = pts[0];
     const angle = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]);
+    // Perpendicular normal
+    const nx = -Math.sin(angle), ny = Math.cos(angle);
+    const inward = nx * (centX - sfx) + ny * (centY - sfy) > 0;
+    const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
+    // Short tick
     ctx.save(); ctx.translate(sfx, sfy); ctx.rotate(angle + Math.PI / 2);
-    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0);
+    ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke(); ctx.restore();
-    ctx.font = "bold 9px monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillStyle = "#999"; ctx.fillText("S/F", sfx + 12, sfy);
+    // Label outside
+    ctx.font = "bold 8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#aaa"; ctx.fillText("S/F", sfx + outNx * 14, sfy + outNy * 14);
   }
 
   // Pit lane path (accumulated from passive detection)
