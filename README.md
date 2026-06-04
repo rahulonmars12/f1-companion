@@ -1,5 +1,12 @@
 **4/6/2026 Changes**
 
+  Track map — replaced the old "all 20 drivers tangled together" path with a single-driver trace sorted by time. The P1 driver's locations for the last 5 minutes are deduplicated and drawn as a smooth
+  bezier curve. Once the laps API returns sector times, the track automatically splits into red (S1) / yellow (S2) / purple (S3) segments with boundary markers and a S/F line. A small sector legend sits
+  in the top-right corner.
+  
+  Standings invisible — the root cause was that live_window=60 ("last 60 seconds of wall-clock time") returns nothing when the most recent session ended days ago. The new effectiveQueryTime detects a
+  completed session and falls back to date_end as the query reference, so all data hooks fetch from near the end of the race instead of right now.
+  
   Fix 1 — Flashing (root cause)
   recentIso(30) was called during render, embedding a live timestamp in the SWR cache key. On every re-render (including ones triggered by fresh data arriving), the key changed, SWR saw a new query,
   cleared its data, and refetched → blank flash.
