@@ -397,8 +397,8 @@ export default function Home() {
         onGoLive={handleGoLive}
       />
 
-      {/* Mobile driver/battle detail overlay */}
-      {panelMode.type !== "idle" && (
+      {/* Mobile driver detail overlay — only on explicit tap, not auto-battle */}
+      {panelMode.type === "driver" && (
         <div className="md:hidden fixed inset-0 z-50" onClick={handleClosePanel}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <div
