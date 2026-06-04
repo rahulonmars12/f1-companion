@@ -53,9 +53,8 @@ export default function StandingsPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        {sorted.map((pos, idx) => {
+        {sorted.map((pos) => {
           const driver = drivers.get(pos.driver_number);
-          if (!driver) return null;
 
           const interval = intervals.get(pos.driver_number);
           const car = carData.get(pos.driver_number);
@@ -63,7 +62,7 @@ export default function StandingsPanel({
           const isSelected = selectedDriver === pos.driver_number;
           const isBattling = battleSet.has(pos.driver_number);
           const isAttacker = battles.some((b) => b.attacker === pos.driver_number);
-          const teamColor = driver.team_colour
+          const teamColor = driver?.team_colour
             ? `#${driver.team_colour}`
             : "#888888";
 
@@ -103,11 +102,13 @@ export default function StandingsPanel({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-white text-sm font-mono font-bold tracking-wide">
-                    {driver.name_acronym}
+                    {driver?.name_acronym ?? `#${pos.driver_number}`}
                   </span>
-                  <span className="text-f1-muted text-xs font-mono">
-                    #{driver.driver_number}
-                  </span>
+                  {driver && (
+                    <span className="text-f1-muted text-xs font-mono">
+                      #{driver.driver_number}
+                    </span>
+                  )}
                   {isBattling && (
                     <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-400/10 px-1 rounded">
                       {isAttacker ? "▲ DRS" : "●"}
@@ -116,7 +117,7 @@ export default function StandingsPanel({
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-f1-muted text-[10px] font-mono truncate">
-                    {driver.team_name}
+                    {driver?.team_name ?? "Loading…"}
                   </span>
                 </div>
               </div>

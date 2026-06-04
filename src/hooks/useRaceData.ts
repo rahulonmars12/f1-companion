@@ -17,23 +17,7 @@ import {
 } from "@/lib/openf1";
 import { getTeamColor } from "@/lib/constants";
 
-// Fetcher: uses indexOf("=") so operators like date>= and date<= parse correctly.
-// Key format: "endpoint?key=val&date>={iso}&date<={iso}"
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fetcher = (path: string): Promise<any[]> => {
-  const [endpoint, qs] = path.split("?");
-  const params: Record<string, string> = {};
-  if (qs) {
-    for (const part of qs.split("&")) {
-      const idx = part.indexOf("=");
-      if (idx > 0) {
-        params[decodeURIComponent(part.slice(0, idx))] =
-          decodeURIComponent(part.slice(idx + 1));
-      }
-    }
-  }
-  return apiFetch(endpoint, params);
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function recentIso(seconds: number): string {
   return new Date(Date.now() - seconds * 1000).toISOString();
@@ -43,24 +27,54 @@ function shiftIso(iso: string, offsetSec: number): string {
   return new Date(new Date(iso).getTime() + offsetSec * 1000).toISOString();
 }
 
+// ─── Fetcher ──────────────────────────────────────────────────────────────────
+// Stable live keys use "live_window=N" instead of embedding a timestamp.
+// The fetcher converts this to "date>=" at actual fetch time so the SWR
+// cache key never changes between renders, eliminating the flash.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fetcher = (path: string): Promise<any[]> => {
+  const [endpoint, qs] = path.split("?");
+  const params: Record<string, string> = {};
+  if (qs) {
+    for (const part of qs.split("&")) {
+      const idx = part.indexOf("=");
+      if (idx > 0) {
+        const k = decodeURIComponent(part.slice(0, idx));
+        const v = decodeURIComponent(part.slice(idx + 1));
+        if (k === "live_window") {
+          // Convert to a date filter at fetch time (not key-construction time)
+          params["date>"] = recentIso(parseInt(v, 10));
+        } else {
+          params[k] = v;
+        }
+      }
+    }
+  }
+  return apiFetch(endpoint, params);
+};
+
+const SWR_BASE = { revalidateOnFocus: false, keepPreviousData: true } as const;
+
 // ─── Session hooks ─────────────────────────────────────────────────────────────
 
 export function useSession() {
-  const { data, error } = useSWR<Session[]>("sessions?session_key=latest", fetcher, {
-    refreshInterval: 30_000,
-  });
+  const { data, error } = useSWR<Session[]>(
+    "sessions?session_key=latest",
+    fetcher,
+    { ...SWR_BASE, refreshInterval: 30_000 }
+  );
   return { session: data?.[0] ?? null, loading: !data && !error, error };
 }
 
 export function useSessionsList() {
   const year = new Date().getFullYear();
   const { data: y0 } = useSWR<Session[]>(`sessions?year=${year}`, fetcher, {
+    ...SWR_BASE,
     refreshInterval: 0,
-    revalidateOnFocus: false,
   });
   const { data: y1 } = useSWR<Session[]>(`sessions?year=${year - 1}`, fetcher, {
+    ...SWR_BASE,
     refreshInterval: 0,
-    revalidateOnFocus: false,
   });
   return useMemo(() => {
     const all = [...(y0 ?? []), ...(y1 ?? [])];
@@ -69,13 +83,12 @@ export function useSessionsList() {
 }
 
 // ─── Per-session data hooks ────────────────────────────────────────────────────
-// All accept optional currentTime. When provided → historical window, no polling.
 
 export function useDrivers(sessionKey: number | null) {
   const { data } = useSWR<Driver[]>(
     sessionKey ? `drivers?session_key=${sessionKey}` : null,
     fetcher,
-    { refreshInterval: 60_000, revalidateOnFocus: false }
+    { ...SWR_BASE, refreshInterval: 60_000 }
   );
   return useMemo(() => {
     const map = new Map<number, Driver>();
@@ -93,14 +106,16 @@ export function useDrivers(sessionKey: number | null) {
 
 export function usePositions(sessionKey: number | null, currentTime?: string | null) {
   const live = !currentTime;
+  // Live: stable key (no timestamp) — fetcher injects date> at call time
+  // Historical: key encodes the exact window, changes when user scrubs
   const key = sessionKey
     ? live
-      ? `position?session_key=${sessionKey}&date>=${recentIso(30)}`
+      ? `position?session_key=${sessionKey}&live_window=60`
       : `position?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -120)}&date<=${currentTime}`
     : null;
   const { data } = useSWR<Position[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: live ? 4_000 : 0,
-    revalidateOnFocus: false,
   });
   return useMemo(() => {
     const latest = new Map<number, Position>();
@@ -116,12 +131,12 @@ export function useIntervals(sessionKey: number | null, currentTime?: string | n
   const live = !currentTime;
   const key = sessionKey
     ? live
-      ? `intervals?session_key=${sessionKey}&date>=${recentIso(30)}`
+      ? `intervals?session_key=${sessionKey}&live_window=60`
       : `intervals?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -120)}&date<=${currentTime}`
     : null;
   const { data } = useSWR<Interval[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: live ? 4_000 : 0,
-    revalidateOnFocus: false,
   });
   const latest = useMemo(() => {
     const map = new Map<number, Interval>();
@@ -138,12 +153,12 @@ export function useLocations(sessionKey: number | null, currentTime?: string | n
   const live = !currentTime;
   const key = sessionKey
     ? live
-      ? `location?session_key=${sessionKey}&date>=${recentIso(5)}`
+      ? `location?session_key=${sessionKey}&live_window=6`
       : `location?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -15)}&date<=${currentTime}`
     : null;
   const { data } = useSWR<Location[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: live ? 2_000 : 0,
-    revalidateOnFocus: false,
   });
   return useMemo(() => {
     const latest = new Map<number, Location>();
@@ -159,12 +174,12 @@ export function useTrackPath(sessionKey: number | null, currentTime?: string | n
   const live = !currentTime;
   const key = sessionKey
     ? live
-      ? `location?session_key=${sessionKey}&date>=${recentIso(300)}`
+      ? `location?session_key=${sessionKey}&live_window=300`
       : `location?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -300)}&date<=${currentTime}`
     : null;
   const { data } = useSWR<Location[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: live ? 30_000 : 0,
-    revalidateOnFocus: false,
   });
   return data ?? [];
 }
@@ -173,12 +188,12 @@ export function useCarData(sessionKey: number | null, currentTime?: string | nul
   const live = !currentTime;
   const key = sessionKey
     ? live
-      ? `car_data?session_key=${sessionKey}&date>=${recentIso(5)}`
+      ? `car_data?session_key=${sessionKey}&live_window=6`
       : `car_data?session_key=${sessionKey}&date>=${shiftIso(currentTime!, -10)}&date<=${currentTime}`
     : null;
   const { data } = useSWR<CarData[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: live ? 2_000 : 0,
-    revalidateOnFocus: false,
   });
   return useMemo(() => {
     const latest = new Map<number, CarData>();
@@ -202,10 +217,13 @@ export function useTeamRadio(
         : `team_radio?session_key=${sessionKey}&driver_number=${driverNumber}`
       : null;
   const { data } = useSWR<TeamRadio[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: currentTime ? 0 : 10_000,
-    revalidateOnFocus: false,
   });
-  return useMemo(() => [...(data ?? [])].sort((a, b) => b.date.localeCompare(a.date)), [data]);
+  return useMemo(
+    () => [...(data ?? [])].sort((a, b) => b.date.localeCompare(a.date)),
+    [data]
+  );
 }
 
 export function useRaceControl(sessionKey: number | null, currentTime?: string | null) {
@@ -215,23 +233,25 @@ export function useRaceControl(sessionKey: number | null, currentTime?: string |
       : `race_control?session_key=${sessionKey}`
     : null;
   const { data } = useSWR<RaceControl[]>(key, fetcher, {
+    ...SWR_BASE,
     refreshInterval: currentTime ? 0 : 5_000,
-    revalidateOnFocus: false,
   });
-  return useMemo(() => [...(data ?? [])].sort((a, b) => b.date.localeCompare(a.date)), [data]);
+  return useMemo(
+    () => [...(data ?? [])].sort((a, b) => b.date.localeCompare(a.date)),
+    [data]
+  );
 }
 
 export function useStints(sessionKey: number | null, currentLap?: number) {
   const { data } = useSWR<Stint[]>(
     sessionKey ? `stints?session_key=${sessionKey}` : null,
     fetcher,
-    { refreshInterval: currentLap !== undefined ? 0 : 10_000, revalidateOnFocus: false }
+    { ...SWR_BASE, refreshInterval: currentLap !== undefined ? 0 : 10_000 }
   );
   return useMemo(() => {
     const result = new Map<number, Stint>();
     for (const s of data ?? []) {
       if (currentLap !== undefined) {
-        // Historical: find the stint active at this lap
         if (s.lap_start <= currentLap && (s.lap_end == null || s.lap_end >= currentLap)) {
           result.set(s.driver_number, s);
         }
@@ -250,12 +270,14 @@ export function useLaps(sessionKey: number | null, driverNumber: number | null) 
       ? `laps?session_key=${sessionKey}&driver_number=${driverNumber}`
       : null,
     fetcher,
-    { refreshInterval: 10_000, revalidateOnFocus: false }
+    { ...SWR_BASE, refreshInterval: 10_000 }
   );
-  return useMemo(() => [...(data ?? [])].sort((a, b) => a.lap_number - b.lap_number), [data]);
+  return useMemo(
+    () => [...(data ?? [])].sort((a, b) => a.lap_number - b.lap_number),
+    [data]
+  );
 }
 
-// Gap history computed from the raw interval window (works for both live & historical)
 export function useGapHistory(rawIntervals: Interval[]): Map<string, number[]> {
   return useMemo(() => {
     const history = new Map<string, number[]>();

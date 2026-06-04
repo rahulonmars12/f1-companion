@@ -43,10 +43,12 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState<1 | 2 | 5 | 10 | 30>(1);
 
-  // When a historical session is picked, start from its beginning
+  // When a historical session is picked, start 15 min in — OpenF1 has no
+  // position data before a session actually begins (formation lap, grid walks, etc.)
   const handlePickSession = useCallback((s: Session) => {
     setPickedSession(s);
-    setCurrentTime(s.date_start);
+    const fifteenMin = new Date(new Date(s.date_start).getTime() + 15 * 60 * 1000).toISOString();
+    setCurrentTime(fifteenMin);
     setIsPlaying(false);
   }, []);
 
