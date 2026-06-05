@@ -1,4 +1,25 @@
 **5/6/2026 Changes**
+ Step 1 — Welcome
+  Centered card, no beacon. "F1 Companion / A live race experience. Takes about 30 seconds." → Start Tour
+
+  Step 2 — Canadian GP · Montréal
+  On enter: searches useSessionsList() for country_name === "Canada" && session_type === "Race", calls handlePickSession with it (starts at +15 min into the race). Pulsing red beacon at the header.
+  "Loaded — tap the circuit name any time to switch."
+
+  Step 3 — Race Timeline
+  On enter: seeks to 62% through the session so the race is populated with real data. Beacon at the scrubber track (bottom of screen). Card lifts to 136px to clear it. "Drag the slider, hit play, up to
+  30× speed."
+
+  Step 4 — Race Order
+  On enter: switches mobile tab to order. Beacon at the Order tab pill in the nav bar. "20 drivers ranked live, tap any row for stats and radio."
+
+  Step 5 — Head-to-Head
+  On enter: switches to h2h. Beacon at the H2H tab. "Sector deltas, lap chart, telemetry. Tap driver chips to swap."
+
+  Step 6 — Championship & Calendar
+  On enter: switches to news. Beacon at the News tab. → "Let's go" completes the tour and sets f1-onboarding-done in localStorage.
+
+  Progress pills fill left to right, the active pill elongates (6px → 18px). There's a Skip link on all steps except the first and last.
 
   Track car dots (OT fixed + throttle/brake ring)
   - OT ring now fires at drs >= 10 (actually deployed, not just eligible) — cyan colour so it's distinct
