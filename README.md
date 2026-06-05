@@ -1,3 +1,25 @@
+**5/6/2026 Changes**
+
+  Track car dots (OT fixed + throttle/brake ring)
+  - OT ring now fires at drs >= 10 (actually deployed, not just eligible) — cyan colour so it's distinct
+  - New inner outline ring: red when braking, green at ≥90% throttle — drawn just outside the dot edge so it reads as a state indicator without cluttering the label
+  
+  H2H sector deltas
+  - lastSectorDelta memo finds the most recent lap where both drivers have all three sector times
+  - Three chips showing S1 / S2 / S3 with delta: coloured in driver A's team colour if they're faster, driver B's if slower, grey if equal
+
+  Weather strip (Intel tab)
+  - Compact header row: TRK temp · AIR temp · HUM% · WIND speed + direction (cardinal, derived from degrees)
+  - Blue "RAIN" badge appears only when rainfall > 0 
+  - Updates every 30 seconds via the existing OpenF1 proxy
+
+  Championship standings (News tab)
+  - Removed single-race points tables entirely
+  - Full season driver standings + constructor standings fetched from Jolpica API (Ergast replacement) via a new /api/jolpica/[...path] proxy route
+  - Team colours mapped via getTeamColor so bars match the rest of the UI
+  - Calendar and countdown unchanged at the top
+
+
 **4/6/2026 Changes**
   Feedback fixes
   - Favourites no longer pinned to top — they just get a gold left border + ★ inline within the sorted race order
