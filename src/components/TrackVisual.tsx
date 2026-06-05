@@ -47,8 +47,8 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: [number, number][]) {
   ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
 }
 
-// Sector colors — grey/amber/purple so S1 isn't confused with errors
-const S1 = "#64748b", S2 = "#fbbf24", S3 = "#a855f7";
+// Sector colors: cool grey / amber / lavender
+const S1 = "#7c8fa6", S2 = "#f59e0b", S3 = "#c084fc";
 const LERP = 0.1;
 
 function drawTrack(
@@ -59,31 +59,37 @@ function drawTrack(
 ) {
   const pts: [number, number][] = trackPath.map(l => project(l.x, l.y, t));
   const n = pts.length;
+  if (n < 2) return;
 
-  // Shadow
-  ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 20;
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
-  tracePath(ctx, pts); ctx.stroke();
-
-  // Centroid for outward-facing labels
   const centX = pts.reduce((s, p) => s + p[0], 0) / n;
   const centY = pts.reduce((s, p) => s + p[1], 0) / n;
 
+  // ── Layer 1: deep shadow ──────────────────────────────────────────────────
+  ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 18;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  tracePath(ctx, pts); ctx.stroke();
+
+  // ── Layer 2: asphalt surface ──────────────────────────────────────────────
+  ctx.beginPath(); ctx.strokeStyle = "#1d1d1d"; ctx.lineWidth = 9;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  tracePath(ctx, pts); ctx.stroke();
+
+  // ── Layer 3: sector tint (thin overlay, semi-transparent) ─────────────────
   if (sectorFractions) {
     const s1e = Math.min(Math.floor(n * sectorFractions.s1), n - 1);
     const s2e = Math.min(Math.floor(n * (sectorFractions.s1 + sectorFractions.s2)), n - 1);
     for (const { slice, color } of [
-      { slice: pts.slice(0, s1e + 1) as [number,number][], color: S1 },
-      { slice: pts.slice(s1e, s2e + 1) as [number,number][], color: S2 },
-      { slice: pts.slice(s2e) as [number,number][], color: S3 },
+      { slice: pts.slice(0, s1e + 1) as [number, number][], color: S1 },
+      { slice: pts.slice(s1e, s2e + 1) as [number, number][], color: S2 },
+      { slice: pts.slice(s2e) as [number, number][], color: S3 },
     ]) {
       if (slice.length < 2) continue;
-      ctx.beginPath(); ctx.strokeStyle = color + "dd"; ctx.lineWidth = 6;
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      tracePath(ctx, slice); ctx.stroke();
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 3.5;
+      ctx.globalAlpha = 0.55; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      tracePath(ctx, slice); ctx.stroke(); ctx.globalAlpha = 1;
     }
 
-    // Sector boundary tick lines + outward labels
+    // Sector boundary ticks — clean butt-capped lines, outward labels
     for (const { idx, label, color } of [
       { idx: s1e, label: "S2", color: S2 },
       { idx: s2e, label: "S3", color: S3 },
@@ -91,40 +97,54 @@ function drawTrack(
       if (idx <= 0 || idx >= n) continue;
       const [bx, by] = pts[idx];
       const i0 = Math.max(0, idx - 3), i1 = Math.min(n - 1, idx + 3);
-      const dx = pts[i1][0] - pts[i0][0], dy = pts[i1][1] - pts[i0][1];
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nx = -dy / len, ny = dx / len;
+      const ddx = pts[i1][0] - pts[i0][0], ddy = pts[i1][1] - pts[i0][1];
+      const len = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+      const nx = -ddy / len, ny = ddx / len;
       const inward = nx * (centX - bx) + ny * (centY - by) > 0;
       const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
-      // Tick
       ctx.beginPath();
-      ctx.moveTo(bx - nx * 7, by - ny * 7);
-      ctx.lineTo(bx + nx * 7, by + ny * 7);
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = "square"; ctx.stroke();
+      ctx.moveTo(bx - nx * 6, by - ny * 6); ctx.lineTo(bx + nx * 6, by + ny * 6);
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineCap = "butt"; ctx.stroke();
       ctx.lineCap = "round";
-      // Label outside
-      ctx.font = "bold 9px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = color;
-      ctx.fillText(label, bx + outNx * 15, by + outNy * 15);
+      ctx.font = "bold 8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = color; ctx.globalAlpha = 0.85;
+      ctx.fillText(label, bx + outNx * 13, by + outNy * 13); ctx.globalAlpha = 1;
     }
   } else {
-    ctx.beginPath(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 6;
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    tracePath(ctx, pts); ctx.stroke();
+    // No sector data — subtle grey surface
+    ctx.beginPath(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 3.5;
+    ctx.globalAlpha = 0.7; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    tracePath(ctx, pts); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
-  // S/F — very short tick, label outside
+  // ── Direction of travel chevron (~7% along track) ─────────────────────────
+  const arrIdx = Math.floor(n * 0.07);
+  if (arrIdx > 0 && arrIdx < n - 2) {
+    const [ax, ay] = pts[arrIdx];
+    const [bx2, by2] = pts[arrIdx + 2];
+    const ang = Math.atan2(by2 - ay, bx2 - ax);
+    ctx.save();
+    ctx.translate(ax, ay); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(0, 0); ctx.lineTo(-5, 3);
+    ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1.2;
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── S/F: tiny checkered finish line — no text ─────────────────────────────
   if (pts.length > 1) {
     const [sfx, sfy] = pts[0];
     const angle = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]);
-    const nx = -Math.sin(angle), ny = Math.cos(angle);
-    const inward = nx * (centX - sfx) + ny * (centY - sfy) > 0;
-    const outNx = inward ? -nx : nx, outNy = inward ? -ny : ny;
     ctx.save(); ctx.translate(sfx, sfy); ctx.rotate(angle + Math.PI / 2);
-    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.lineCap = "square"; ctx.stroke(); ctx.restore();
-    ctx.font = "bold 8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillStyle = "#999"; ctx.fillText("S/F", sfx + outNx * 13, sfy + outNy * 13);
+    const SQ = 2.2, COLS = 4, ROWS = 2;
+    const W = COLS * SQ, H = ROWS * SQ;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? "rgba(255,255,255,0.92)" : "rgba(5,5,5,0.92)";
+        ctx.fillRect(-W / 2 + c * SQ, -H / 2 + r * SQ, SQ, SQ);
+      }
+    }
+    ctx.restore();
   }
 }
 
@@ -243,7 +263,8 @@ export default function TrackVisual({
                 const driver = driversRef.current.get(dn);
                 if (!driver) continue;
 
-                const [cx, cy] = project(raw.x, raw.y, t);
+                const [_cx, _cy] = project(raw.x, raw.y, t);
+                const cx = Math.round(_cx), cy = Math.round(_cy);
                 const teamColor = driver.team_colour ? `#${driver.team_colour}` : "#888";
                 const isSelected = selectedDriverRef.current === dn;
                 const isBattling = battleSet.has(dn);
@@ -327,14 +348,10 @@ export default function TrackVisual({
       <div className="absolute top-3 right-3 z-10 flex flex-col gap-1 pointer-events-none">
         {([{ label: "S1", color: S1 }, { label: "S2", color: S2 }, { label: "S3", color: S3 }]).map(({ label, color }) => (
           <div key={label} className="flex items-center gap-1.5">
-            <span className="w-3 h-1 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-[9px] font-mono" style={{ color }}>{label}</span>
+            <span className="w-4 h-0.5 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-[9px] font-mono opacity-70" style={{ color }}>{label}</span>
           </div>
         ))}
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="w-3 h-3 rounded-full border border-green-500 opacity-60" style={{ fontSize: 0 }} />
-          <span className="text-[9px] font-mono text-green-500 opacity-60">OT</span>
-        </div>
       </div>
       <canvas ref={canvasRef} className="w-full h-full cursor-pointer" onClick={handleClick} style={{ display: "block" }} />
     </div>
