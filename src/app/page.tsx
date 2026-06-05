@@ -10,8 +10,10 @@ import H2HPanel from "@/components/H2HPanel";
 import NewsPanel from "@/components/NewsPanel";
 import SessionSelector from "@/components/SessionSelector";
 import TimeControls from "@/components/TimeControls";
+import Onboarding from "@/components/Onboarding";
 import {
   useSession,
+  useSessionsList,
   useDrivers,
   usePositions,
   useIntervals,
@@ -33,8 +35,15 @@ import { parseGapSeconds, Session } from "@/lib/openf1";
 type MobileTab = "order" | "track" | "intel" | "h2h" | "news";
 
 export default function Home() {
+  // ── Onboarding ────────────────────────────────────────────────────────────────
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return !!localStorage.getItem("f1-onboarding-done"); } catch { return false; }
+  });
+  const [mobileTab, setMobileTab] = useState<MobileTab>("order");
+
   // ── Session ──────────────────────────────────────────────────────────────────
   const { session: liveSession, loading: sessionLoading } = useSession();
+  const allSessions = useSessionsList();
   const [pickedSession, setPickedSession] = useState<Session | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const session = pickedSession ?? liveSession;
@@ -207,6 +216,31 @@ export default function Home() {
     setPanelMode({ type: "idle" });
   }, []);
 
+  // ── Onboarding actions ────────────────────────────────────────────────────────
+  const handleOnboardingAction = useCallback((action: string) => {
+    if (action === "select-montreal") {
+      const montreal = allSessions.find(s =>
+        (s.country_name === "Canada" || (s.circuit_short_name ?? "").toLowerCase().includes("montreal"))
+        && s.session_type === "Race"
+      );
+      if (montreal) {
+        setPickedSession(montreal);
+        setCurrentTime(new Date(new Date(montreal.date_start).getTime() + 15 * 60 * 1000).toISOString());
+        setIsPlaying(false);
+      }
+    } else if (action === "seek-midrace") {
+      const s = pickedSession ?? liveSession;
+      if (s) {
+        const start = new Date(s.date_start).getTime();
+        const end = s.date_end ? new Date(s.date_end).getTime() : start + 7_200_000;
+        setCurrentTime(new Date(start + (end - start) * 0.62).toISOString());
+        setIsPlaying(false);
+      }
+    } else if (action.startsWith("tab:")) {
+      setMobileTab(action.slice(4) as MobileTab);
+    }
+  }, [allSessions, pickedSession, liveSession]);
+
   const radioDriverNumber = panelMode.type === "driver" ? panelMode.driverNumber : null;
   const radios = useTeamRadio(sessionKey, radioDriverNumber, currentTime);
 
@@ -228,9 +262,6 @@ export default function Home() {
       return next;
     });
   }, []);
-
-  // ── Mobile tab ────────────────────────────────────────────────────────────────
-  const [mobileTab, setMobileTab] = useState<MobileTab>("track");
 
   // ── Loading / no-session screens ──────────────────────────────────────────────
   if (sessionLoading && !pickedSession) {
@@ -430,6 +461,16 @@ export default function Home() {
 
       {showPicker && (
         <SessionSelector currentSession={session} onSelect={handlePickSession} onClose={() => setShowPicker(false)} />
+      )}
+
+      {!onboardingDone && (
+        <Onboarding
+          onComplete={() => {
+            setOnboardingDone(true);
+            try { localStorage.setItem("f1-onboarding-done", "1"); } catch { /* ignore */ }
+          }}
+          onAction={handleOnboardingAction}
+        />
       )}
     </div>
   );
