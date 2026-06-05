@@ -265,6 +265,23 @@ function CompareView({
     return shared.map(n => ({ lap: n, a: mapA.get(n) ?? 0, b: mapB.get(n) ?? 0 }));
   }, [lapsA, lapsB]);
 
+  const lastSectorDelta = useMemo(() => {
+    const mapA = new Map(lapsA.map(l => [l.lap_number, l]));
+    for (let i = lapsB.length - 1; i >= 0; i--) {
+      const lb = lapsB[i];
+      if (!lb.duration_sector_1 || !lb.duration_sector_2 || !lb.duration_sector_3) continue;
+      const la = mapA.get(lb.lap_number);
+      if (!la?.duration_sector_1 || !la?.duration_sector_2 || !la?.duration_sector_3) continue;
+      return {
+        lap: lb.lap_number,
+        s1: la.duration_sector_1 - lb.duration_sector_1,
+        s2: la.duration_sector_2 - lb.duration_sector_2,
+        s3: la.duration_sector_3 - lb.duration_sector_3,
+      };
+    }
+    return null;
+  }, [lapsA, lapsB]);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Driver selector */}
@@ -304,6 +321,36 @@ function CompareView({
             <div className="text-[9px] font-mono text-f1-muted mb-0.5">Best Lap</div>
             <div className="text-xs font-mono font-bold" style={{ color: colorB }}>{formatLap(bestB?.lap_duration)}</div>
             <div className="text-[9px] font-mono text-f1-muted">L{bestB?.lap_number ?? "—"}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Sector deltas — last shared lap with complete sector data */}
+      {lastSectorDelta && (
+        <div>
+          <div className="text-[9px] font-mono text-f1-muted uppercase tracking-wider mb-1.5">
+            Sectors · L{lastSectorDelta.lap}
+            <span className="ml-1 normal-case text-f1-border">(+A faster)</span>
+          </div>
+          <div className="flex gap-2">
+            {([
+              { label: "S1", delta: lastSectorDelta.s1, color: "#7c8fa6" },
+              { label: "S2", delta: lastSectorDelta.s2, color: "#f59e0b" },
+              { label: "S3", delta: lastSectorDelta.s3, color: "#c084fc" },
+            ]).map(({ label, delta, color }) => {
+              const aFaster = delta < -0.001;
+              const bFaster = delta > 0.001;
+              return (
+                <div key={label}
+                  className="flex-1 rounded p-1.5 text-center border border-f1-border/30 bg-white/[0.03]">
+                  <div className="text-[9px] font-mono mb-0.5" style={{ color }}>{label}</div>
+                  <div className="text-[10px] font-mono font-bold tabular-nums"
+                    style={{ color: aFaster ? colorA : bFaster ? colorB : "#555" }}>
+                    {Math.abs(delta) < 0.001 ? "=" : `${aFaster ? "-" : "+"}${Math.abs(delta).toFixed(3)}`}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

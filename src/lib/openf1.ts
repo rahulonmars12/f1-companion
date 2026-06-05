@@ -90,6 +90,18 @@ export interface Stint {
   session_key: number;
 }
 
+export interface Weather {
+  date: string;
+  air_temperature: number;
+  humidity: number;
+  pressure: number;
+  rainfall: number;
+  track_temperature: number;
+  wind_direction: number;
+  wind_speed: number;
+  session_key: number;
+}
+
 export interface Lap {
   date_start: string;
   driver_number: number;

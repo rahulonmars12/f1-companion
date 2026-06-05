@@ -1,20 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { Driver, Position } from "@/lib/openf1";
-import { useCalendar } from "@/hooks/useRaceData";
+import { useCalendar, useDriverStandings, useConstructorStandings } from "@/hooks/useRaceData";
+import { getTeamColor } from "@/lib/constants";
 
-const F1_POINTS: Record<number, number> = {
-  1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1,
-};
-
-interface NewsPanelProps {
-  drivers: Map<number, Driver>;
-  positions: Map<number, Position>;
-}
-
-export default function NewsPanel({ drivers, positions }: NewsPanelProps) {
+export default function NewsPanel() {
   const races = useCalendar();
+  const driverStandings = useDriverStandings();
+  const constructorStandings = useConstructorStandings();
   const now = new Date();
 
   const nextRace = races.find(s => new Date(s.date_start) > now) ?? null;
@@ -27,38 +20,6 @@ export default function NewsPanel({ drivers, positions }: NewsPanelProps) {
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     return { days, hours, mins };
   }, [nextRace]);
-
-  // Driver standings for this race
-  const driverPoints = useMemo(() => {
-    return [...positions.entries()]
-      .sort(([, a], [, b]) => a.position - b.position)
-      .map(([dn, pos]) => ({
-        dn,
-        driver: drivers.get(dn),
-        points: F1_POINTS[pos.position] ?? 0,
-        position: pos.position,
-      }))
-      .filter(({ driver }) => !!driver);
-  }, [positions, drivers]);
-
-  // Constructor totals
-  const constructorPoints = useMemo(() => {
-    const map = new Map<string, { color: string; points: number; acronyms: string[] }>();
-    for (const { driver, points } of driverPoints) {
-      if (!driver) continue;
-      const team = driver.team_name;
-      const color = `#${driver.team_colour ?? "555"}`;
-      const ex = map.get(team) ?? { color, points: 0, acronyms: [] };
-      map.set(team, {
-        color: ex.color,
-        points: ex.points + points,
-        acronyms: [...ex.acronyms, driver.name_acronym],
-      });
-    }
-    return [...map.entries()]
-      .sort(([, a], [, b]) => b.points - a.points)
-      .map(([team, data]) => ({ team, ...data }));
-  }, [driverPoints]);
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-f1-dark scrollbar-thin">
@@ -101,7 +62,7 @@ export default function NewsPanel({ drivers, positions }: NewsPanelProps) {
           Race Calendar
         </div>
         <div className="flex flex-col gap-1.5">
-          {races.filter(s => new Date(s.date_start) > now).slice(0, 6).map(s => {
+          {races.filter(s => new Date(s.date_start) > now).slice(0, 5).map(s => {
             const d = new Date(s.date_start);
             const diff = d.getTime() - now.getTime();
             const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
@@ -126,61 +87,73 @@ export default function NewsPanel({ drivers, positions }: NewsPanelProps) {
         </div>
       </div>
 
-      {/* This race — driver points */}
-      {driverPoints.length > 0 && (
-        <div className="px-4 pb-2 border-t border-f1-border/50 pt-3">
-          <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
-            Race Points · Drivers
-          </div>
+      {/* Driver championship standings */}
+      <div className="px-4 pb-2 border-t border-f1-border/50 pt-3">
+        <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
+          Championship · Drivers
+        </div>
+        {driverStandings.length === 0 ? (
+          <div className="text-f1-muted text-xs font-mono py-2">Loading…</div>
+        ) : (
           <div className="flex flex-col gap-0.5">
-            {driverPoints.filter(d => d.points > 0).map(({ dn, driver, points, position }) => {
-              const color = driver?.team_colour ? `#${driver.team_colour}` : "#555";
+            {driverStandings.map(s => {
+              const teamName = s.Constructors[0]?.name ?? "";
+              const color = getTeamColor(teamName);
               return (
-                <div key={dn} className="flex items-center gap-3 px-2 py-1.5 rounded">
-                  <span className="text-xs font-mono text-f1-muted tabular-nums w-5 text-center shrink-0">
-                    P{position}
+                <div key={s.Driver.code} className="flex items-center gap-2 px-2 py-1.5 rounded">
+                  <span className="text-[10px] font-mono text-f1-muted tabular-nums w-5 text-right shrink-0">
+                    {s.position}
                   </span>
                   <span className="w-0.5 h-5 rounded-full shrink-0" style={{ backgroundColor: color }} />
                   <span className="flex-1 text-xs font-mono font-bold" style={{ color }}>
-                    {driver?.name_acronym}
+                    {s.Driver.code}
                   </span>
-                  <span className="text-white text-xs font-mono font-bold tabular-nums">
-                    {points}
+                  <span className="text-f1-muted text-[9px] font-mono truncate max-w-[80px] shrink-0">
+                    {s.Constructors[0]?.name}
+                  </span>
+                  <span className="text-white text-xs font-mono font-bold tabular-nums shrink-0">
+                    {s.points}
                     <span className="text-f1-muted font-normal text-[9px] ml-0.5">pts</span>
                   </span>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Constructor points */}
-      {constructorPoints.length > 0 && (
-        <div className="px-4 pb-6 border-t border-f1-border/50 pt-3">
-          <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
-            Race Points · Constructors
-          </div>
-          <div className="flex flex-col gap-1">
-            {constructorPoints.filter(c => c.points > 0).map(({ team, color, points, acronyms }, i) => (
-              <div key={team} className="flex items-center gap-3 px-2 py-1.5 rounded">
-                <span className="text-xs font-mono text-f1-muted tabular-nums w-4 text-center shrink-0">
-                  {i + 1}
-                </span>
-                <span className="w-0.5 h-5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-mono font-bold truncate" style={{ color }}>{team}</div>
-                  <div className="text-[9px] font-mono text-f1-muted">{acronyms.join(" · ")}</div>
-                </div>
-                <span className="text-white text-xs font-mono font-bold tabular-nums">
-                  {points}
-                  <span className="text-f1-muted font-normal text-[9px] ml-0.5">pts</span>
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* Constructor championship standings */}
+      <div className="px-4 pb-6 border-t border-f1-border/50 pt-3">
+        <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
+          Championship · Constructors
         </div>
-      )}
+        {constructorStandings.length === 0 ? (
+          <div className="text-f1-muted text-xs font-mono py-2">Loading…</div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {constructorStandings.map((s, i) => {
+              const color = getTeamColor(s.Constructor.name);
+              return (
+                <div key={s.Constructor.constructorId} className="flex items-center gap-2 px-2 py-1.5 rounded">
+                  <span className="text-[10px] font-mono text-f1-muted tabular-nums w-4 text-right shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="w-0.5 h-5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono font-bold truncate" style={{ color }}>
+                      {s.Constructor.name}
+                    </div>
+                  </div>
+                  <span className="text-white text-xs font-mono font-bold tabular-nums shrink-0">
+                    {s.points}
+                    <span className="text-f1-muted font-normal text-[9px] ml-0.5">pts</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

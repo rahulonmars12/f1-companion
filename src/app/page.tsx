@@ -26,6 +26,7 @@ import {
   useAllPositions,
   useAllLaps,
   useAllStints,
+  useWeather,
 } from "@/hooks/useRaceData";
 import { parseGapSeconds, Session } from "@/lib/openf1";
 
@@ -81,6 +82,7 @@ export default function Home() {
   const allPositions = useAllPositions(sessionKey, effectiveQueryTime);
   const allLaps = useAllLaps(sessionKey);
   const allStints = useAllStints(sessionKey);
+  const weather = useWeather(sessionKey);
 
   const currentLap = useMemo(() => {
     const nums = raceControl.filter(m => m.lap_number != null).map(m => m.lap_number!);
@@ -321,6 +323,7 @@ export default function Home() {
             allStints={allStints}
             raceControl={raceControl}
             pitAlert={pitAlert}
+            weather={weather}
             currentTime={effectiveQueryTime}
             currentLap={currentLap}
           />
@@ -343,10 +346,7 @@ export default function Home() {
 
         {/* News */}
         <div className={`${mobileTab === "news" ? "flex w-full" : "hidden"} md:hidden`}>
-          <NewsPanel
-            drivers={drivers}
-            positions={positions}
-          />
+          <NewsPanel />
         </div>
 
         {/* Detail sidebar (desktop only) */}

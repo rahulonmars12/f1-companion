@@ -14,6 +14,7 @@ import {
   RaceControl,
   Stint,
   Lap,
+  Weather,
 } from "@/lib/openf1";
 import { getTeamColor } from "@/lib/constants";
 
@@ -373,6 +374,73 @@ export function useCalendar() {
   return useMemo(() => {
     return [...(y0 ?? []), ...(y1 ?? [])].sort((a, b) => a.date_start.localeCompare(b.date_start));
   }, [y0, y1]);
+}
+
+export function useWeather(sessionKey: number | null) {
+  const { data } = useSWR<Weather[]>(
+    sessionKey ? `weather?session_key=${sessionKey}&live_window=120` : null,
+    fetcher,
+    { ...SWR_BASE, refreshInterval: 30_000 }
+  );
+  return useMemo(() => {
+    if (!data || data.length === 0) return null;
+    return data.reduce<Weather>((latest, w) => (w.date > latest.date ? w : latest), data[0]);
+  }, [data]);
+}
+
+// ─── Championship standings (Jolpica / Ergast) ─────────────────────────────────
+
+async function jolpicaFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`/api/jolpica/${path}`);
+  if (!res.ok) throw new Error(`Jolpica ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export interface JolpicaDriverStanding {
+  position: string;
+  points: string;
+  wins: string;
+  Driver: { code: string; givenName: string; familyName: string };
+  Constructors: Array<{ name: string; constructorId: string }>;
+}
+
+export interface JolpicaConstructorStanding {
+  position: string;
+  points: string;
+  wins: string;
+  Constructor: { constructorId: string; name: string };
+}
+
+type DriverStandingsResponse = {
+  MRData: { StandingsTable: { StandingsLists: Array<{ DriverStandings: JolpicaDriverStanding[] }> } };
+};
+
+type ConstructorStandingsResponse = {
+  MRData: { StandingsTable: { StandingsLists: Array<{ ConstructorStandings: JolpicaConstructorStanding[] }> } };
+};
+
+export function useDriverStandings() {
+  const { data } = useSWR<DriverStandingsResponse>(
+    "jolpica://f1/current/driverStandings",
+    () => jolpicaFetch<DriverStandingsResponse>("f1/current/driverStandings.json"),
+    { ...SWR_BASE, refreshInterval: 0 }
+  );
+  return useMemo(
+    () => data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings ?? [],
+    [data]
+  );
+}
+
+export function useConstructorStandings() {
+  const { data } = useSWR<ConstructorStandingsResponse>(
+    "jolpica://f1/current/constructorStandings",
+    () => jolpicaFetch<ConstructorStandingsResponse>("f1/current/constructorStandings.json"),
+    { ...SWR_BASE, refreshInterval: 0 }
+  );
+  return useMemo(
+    () => data?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings ?? [],
+    [data]
+  );
 }
 
 export function useGapHistory(rawIntervals: Interval[]): Map<string, number[]> {

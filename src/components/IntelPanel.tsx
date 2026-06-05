@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Driver, Position, RaceControl, Lap, Stint } from "@/lib/openf1";
+import { Driver, Position, RaceControl, Lap, Stint, Weather } from "@/lib/openf1";
 import { COMPOUND_COLORS, COMPOUND_LABELS } from "@/lib/constants";
 import LapChart from "./LapChart";
 
@@ -18,6 +18,7 @@ interface IntelPanelProps {
   allStints: Stint[];
   raceControl: RaceControl[];
   pitAlert: PitAlert | null;
+  weather?: Weather | null;
   currentTime?: string | null;
   currentLap?: number;
 }
@@ -30,6 +31,7 @@ export default function IntelPanel({
   allStints,
   raceControl,
   pitAlert,
+  weather,
   currentTime,
   currentLap,
 }: IntelPanelProps) {
@@ -51,6 +53,9 @@ export default function IntelPanel({
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-f1-dark scrollbar-thin">
+
+      {/* Weather strip */}
+      {weather && <WeatherStrip weather={weather} />}
 
       {/* Live ticker */}
       <div className="border-b border-f1-border/50">
@@ -112,6 +117,41 @@ export default function IntelPanel({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Weather Strip ────────────────────────────────────────────────────────────
+
+function WeatherStrip({ weather }: { weather: Weather }) {
+  const isWet = weather.rainfall > 0;
+  const windDir = ["N","NE","E","SE","S","SW","W","NW"][Math.round(weather.wind_direction / 45) % 8];
+  return (
+    <div className="px-3 py-2 border-b border-f1-border/50 flex items-center gap-3 flex-wrap">
+      <span className="text-[9px] font-mono font-bold tracking-widest text-f1-muted uppercase shrink-0">
+        Weather
+      </span>
+      <div className="flex items-center gap-3 flex-wrap">
+        <Chip label="TRK" value={`${Math.round(weather.track_temperature)}°`} />
+        <Chip label="AIR" value={`${Math.round(weather.air_temperature)}°`} />
+        <Chip label="HUM" value={`${Math.round(weather.humidity)}%`} />
+        <Chip label="WIND" value={`${Math.round(weather.wind_speed)} ${windDir}`} />
+        {isWet && (
+          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded"
+            style={{ color: "#3b82f6", backgroundColor: "#3b82f620", border: "1px solid #3b82f640" }}>
+            RAIN
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Chip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[8px] font-mono text-f1-border uppercase">{label}</span>
+      <span className="text-[10px] font-mono font-bold text-white/80">{value}</span>
     </div>
   );
 }

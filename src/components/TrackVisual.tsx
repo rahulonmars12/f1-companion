@@ -269,7 +269,7 @@ export default function TrackVisual({
                 const isSelected = selectedDriverRef.current === dn;
                 const isBattling = battleSet.has(dn);
                 const car = carDataRef.current.get(dn);
-                const drsActive = car ? car.drs >= 8 : false;
+                const drsActive = car ? car.drs >= 10 : false;
                 const radius = isSelected ? 10 : 7;
 
                 // Glow aura
@@ -285,16 +285,26 @@ export default function TrackVisual({
                   ctx.fillStyle = g; ctx.fill();
                 }
 
-                // Overtake-mode ring (green outer)
+                // OT ring — cyan outer halo, only when DRS is actually deployed
                 if (drsActive) {
-                  ctx.beginPath(); ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
-                  ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 1.5;
-                  ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+                  ctx.beginPath(); ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+                  ctx.strokeStyle = "#06b6d4"; ctx.lineWidth = 1.5;
+                  ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1;
                 }
 
                 // Car dot
                 ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2);
                 ctx.fillStyle = isSelected ? "#fff" : teamColor; ctx.fill();
+
+                // Throttle / brake outline — drawn on top of dot fill
+                if (car) {
+                  const ringColor = car.brake > 0 ? "#ef4444" : car.throttle >= 90 ? "#22c55e" : null;
+                  if (ringColor) {
+                    ctx.beginPath(); ctx.arc(cx, cy, radius + 1.8, 0, Math.PI * 2);
+                    ctx.strokeStyle = ringColor; ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+                  }
+                }
 
                 if (isSelected) {
                   ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2);
