@@ -184,21 +184,23 @@ export function useReferenceTrack(
 ) {
   const live = !currentTime;
 
-  // Prefer a single-lap window when we have a reference lap with timing
-  const key = useMemo(() => {
-    if (!sessionKey || !driverNumber) return null;
+  // Compute key inline (no extra useMemo — keeps hook count stable).
+  // When refLap is available, use a narrow single-lap time window.
+  let key: string | null = null;
+  if (sessionKey && driverNumber) {
     if (refLap?.date_start && refLap.lap_duration) {
-      const start = refLap.date_start;
-      const end = new Date(
-        new Date(start).getTime() + refLap.lap_duration * 1000 + 5_000
-      ).toISOString();
-      return `location?session_key=${sessionKey}&driver_number=${driverNumber}&date>=${start}&date<=${end}`;
+      const startMs = new Date(refLap.date_start).getTime();
+      if (!isNaN(startMs)) {
+        const endIso = new Date(startMs + refLap.lap_duration * 1000 + 5_000).toISOString();
+        key = `location?session_key=${sessionKey}&driver_number=${driverNumber}&date>=${refLap.date_start}&date<=${endIso}`;
+      }
     }
-    // Fallback: large live window or full historical fetch
-    return live
-      ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=300`
-      : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date<=${currentTime}`;
-  }, [sessionKey, driverNumber, refLap, live, currentTime]);
+    if (!key) {
+      key = live
+        ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=300`
+        : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date<=${currentTime}`;
+    }
+  }
 
   const { data } = useSWR<Location[]>(key, fetcher, {
     ...SWR_BASE,
