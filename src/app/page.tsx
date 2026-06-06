@@ -109,8 +109,9 @@ export default function Home() {
     return now >= start - 600_000 && now <= end + 1_800_000;
   }, [liveSession]);
 
-  // ── Qualifying state ───────────────────────────────────────────────────────────
+  // ── Qualifying / Practice state ────────────────────────────────────────────────
   const isQualifying = session?.session_type === "Qualifying";
+  const isPractice = session?.session_name?.includes("Practice") ?? false;
 
   const qualifyingState = useMemo(() => {
     if (!isQualifying) return null;
@@ -123,6 +124,17 @@ export default function Home() {
     const completedPhases = Math.min(raceControl.filter(m => m.flag === "CHEQUERED").length, 3);
     return { bestLaps, completedPhases };
   }, [isQualifying, allLaps, raceControl]);
+
+  const practiceBestLaps = useMemo(() => {
+    if (!isPractice) return null;
+    const bestLaps = new Map<number, typeof allLaps[0]>();
+    for (const lap of allLaps) {
+      if (!lap.lap_duration || lap.is_pit_out_lap) continue;
+      const ex = bestLaps.get(lap.driver_number);
+      if (!ex || (ex.lap_duration ?? Infinity) > lap.lap_duration) bestLaps.set(lap.driver_number, lap);
+    }
+    return bestLaps;
+  }, [isPractice, allLaps]);
 
   // ── Fastest lap ───────────────────────────────────────────────────────────────
   const fastestLap = useMemo(() => {
@@ -351,7 +363,9 @@ export default function Home() {
             onSelectDriver={handleSelectDriver}
             onToggleFavorite={toggleFavorite}
             isQualifying={isQualifying}
-            qualiBestLaps={qualifyingState?.bestLaps}
+            isPractice={isPractice}
+            sessionLabel={session?.session_name}
+            qualiBestLaps={qualifyingState?.bestLaps ?? practiceBestLaps ?? undefined}
             qualiCompletedPhases={qualifyingState?.completedPhases}
           />
         </div>

@@ -20,8 +20,10 @@ interface StandingsPanelProps {
   favorites: number[];
   onSelectDriver: (n: number) => void;
   onToggleFavorite: (n: number) => void;
-  // Qualifying-specific
+  // Qualifying / Practice
   isQualifying?: boolean;
+  isPractice?: boolean;
+  sessionLabel?: string;
   qualiBestLaps?: Map<number, Lap>;
   qualiCompletedPhases?: number;
 }
@@ -30,7 +32,7 @@ export default function StandingsPanel({
   drivers, positions, intervals, carData, stints,
   selectedDriver, battles, fastestLapDriverNumber, pitAlert, currentLap,
   favorites, onSelectDriver, onToggleFavorite,
-  isQualifying, qualiBestLaps, qualiCompletedPhases,
+  isQualifying, isPractice, sessionLabel, qualiBestLaps, qualiCompletedPhases,
 }: StandingsPanelProps) {
   const [showLeader, setShowLeader] = useState(false);
 
@@ -42,7 +44,7 @@ export default function StandingsPanel({
       <aside className="w-full md:w-72 md:shrink-0 border-r border-f1-border bg-f1-panel flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-f1-border">
           <span className="text-xs font-mono font-bold tracking-widest text-f1-muted uppercase">
-            {isQualifying ? "Qualifying" : "Race Order"}
+            {isQualifying ? "Qualifying" : isPractice ? (sessionLabel ?? "Practice") : "Race Order"}
           </span>
         </div>
         <div className="flex-1 flex items-center justify-center text-f1-muted text-xs font-mono">
@@ -123,6 +125,50 @@ export default function StandingsPanel({
           ) : (
             sorted.map(renderQRow)
           )}
+        </div>
+      </aside>
+    );
+  }
+
+  // ── Practice view ───────────────────────────────────────────────────────────
+  if (isPractice && qualiBestLaps) {
+    // Sort by best lap time ascending (fastest first); drivers with no lap go to the end
+    const practiceP1Lap = [...qualiBestLaps.values()].reduce<Lap | null>(
+      (b, l) => !b || (l.lap_duration ?? Infinity) < (b.lap_duration ?? Infinity) ? l : b, null
+    );
+    const practiceP1Best = practiceP1Lap?.lap_duration ?? null;
+    const sortedByBest = [...sorted].sort((a, b) => {
+      const at = qualiBestLaps.get(a.driver_number)?.lap_duration ?? Infinity;
+      const bt = qualiBestLaps.get(b.driver_number)?.lap_duration ?? Infinity;
+      return at - bt;
+    });
+
+    return (
+      <aside className="w-full md:w-72 md:shrink-0 border-r border-f1-border bg-f1-panel flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-f1-border flex items-center justify-between shrink-0">
+          <span className="text-xs font-mono font-bold tracking-widest text-f1-muted uppercase">
+            {sessionLabel ?? "Practice"}
+          </span>
+          <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border tabular-nums"
+            style={{ color: "#14b8a6", borderColor: "#14b8a660", backgroundColor: "#14b8a615" }}>
+            BEST LAP
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {sortedByBest.map((pos, i) => (
+            <QualifyingRow
+              key={pos.driver_number}
+              pos={{ ...pos, position: i + 1 }}
+              driver={drivers.get(pos.driver_number)}
+              bestLap={qualiBestLaps.get(pos.driver_number)}
+              p1BestTime={practiceP1Best}
+              p1BestLap={practiceP1Lap}
+              isSelected={selectedDriver === pos.driver_number}
+              isFavorite={favorites.includes(pos.driver_number)}
+              onSelect={onSelectDriver}
+              onToggleFav={() => onToggleFavorite(pos.driver_number)}
+            />
+          ))}
         </div>
       </aside>
     );
