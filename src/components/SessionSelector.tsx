@@ -23,7 +23,7 @@ const SESSION_ICONS: Record<string, string> = {
 };
 
 export default function SessionSelector({ currentSession, onSelect, onClose }: SessionSelectorProps) {
-  const allSessions = useSessionsList();
+  const { sessions: allSessions, apiError } = useSessionsList();
   const [filter, setFilter] = useState<"Race" | "All">("Race");
   const [search, setSearch] = useState("");
   const nowMs = useMemo(() => Date.now(), []);
@@ -80,7 +80,7 @@ export default function SessionSelector({ currentSession, onSelect, onClose }: S
           <div>
             <h2 className="text-white font-mono font-bold text-base tracking-wide">Select Session</h2>
             <p className="text-f1-muted text-xs font-mono mt-0.5">
-              {allSessions.length === 0 ? "Loading…" : `${allSessions.length} sessions available`}
+              {apiError ? "API unavailable" : allSessions.length === 0 ? "Loading…" : `${allSessions.length} sessions available`}
             </p>
           </div>
           <button
@@ -119,7 +119,23 @@ export default function SessionSelector({ currentSession, onSelect, onClose }: S
 
         {/* Session list */}
         <div className="flex-1 overflow-y-auto">
-          {grouped.length === 0 ? (
+          {apiError ? (
+            <div className="flex flex-col items-center justify-center gap-3 h-48 px-8 text-center">
+              <div className="text-f1-red font-mono font-bold text-sm">API Locked — Live Session In Progress</div>
+              <div className="text-f1-muted text-xs font-mono leading-relaxed">
+                OpenF1 restricts access during live sessions unless you have an API key.
+                Historical sessions will load again once the session ends.
+              </div>
+              <a
+                href="https://openf1.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-mono text-blue-400 hover:text-blue-300 underline underline-offset-2"
+              >
+                Get an API key at openf1.org
+              </a>
+            </div>
+          ) : grouped.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-f1-muted text-xs font-mono">
               {allSessions.length === 0 ? "Loading sessions…" : "No results"}
             </div>

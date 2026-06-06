@@ -119,12 +119,22 @@ export interface Lap {
 
 export const BASE = "/api/openf1";
 
+export class ApiError extends Error {
+  constructor(public detail: string, public status: number) {
+    super(detail);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiFetch<T>(path: string, params: Record<string, string | number> = {}): Promise<T[]> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) qs.set(k, String(v));
   const url = `${BASE}/${path}${qs.toString() ? "?" + qs.toString() : ""}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`OpenF1 ${path} ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.detail ?? `OpenF1 ${path} ${res.status}`, res.status);
+  }
   return res.json();
 }
 

@@ -43,7 +43,7 @@ export default function Home() {
 
   // ── Session ──────────────────────────────────────────────────────────────────
   const { session: liveSession, loading: sessionLoading } = useSession();
-  const allSessions = useSessionsList();
+  const { sessions: allSessions } = useSessionsList();
   const [pickedSession, setPickedSession] = useState<Session | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const session = pickedSession ?? liveSession;

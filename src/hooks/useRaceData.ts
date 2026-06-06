@@ -69,18 +69,20 @@ export function useSession() {
 
 export function useSessionsList() {
   const year = new Date().getFullYear();
-  const { data: y0 } = useSWR<Session[]>(`sessions?year=${year}`, fetcher, {
+  const { data: y0, error: e0 } = useSWR<Session[]>(`sessions?year=${year}`, fetcher, {
     ...SWR_BASE,
     refreshInterval: 0,
   });
-  const { data: y1 } = useSWR<Session[]>(`sessions?year=${year - 1}`, fetcher, {
+  const { data: y1, error: e1 } = useSWR<Session[]>(`sessions?year=${year - 1}`, fetcher, {
     ...SWR_BASE,
     refreshInterval: 0,
   });
-  return useMemo(() => {
+  const sessions = useMemo(() => {
     const all = [...(y0 ?? []), ...(y1 ?? [])];
     return all.sort((a, b) => b.date_start.localeCompare(a.date_start));
   }, [y0, y1]);
+  const apiError: Error | null = e0 ?? e1 ?? null;
+  return { sessions, apiError };
 }
 
 // ─── Per-session data hooks ────────────────────────────────────────────────────
