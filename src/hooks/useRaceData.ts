@@ -362,18 +362,20 @@ export function useAllStints(sessionKey: number | null) {
   return useMemo(() => data ?? [], [data]);
 }
 
-// Race sessions for current and next year — used for the calendar view.
+// Race + Qualifying sessions for current and next year — used for the calendar view.
 export function useCalendar() {
   const year = new Date().getFullYear();
-  const { data: y0 } = useSWR<Session[]>(`sessions?year=${year}&session_type=Race`, fetcher, {
-    ...SWR_BASE, refreshInterval: 0,
-  });
-  const { data: y1 } = useSWR<Session[]>(`sessions?year=${year + 1}&session_type=Race`, fetcher, {
-    ...SWR_BASE, refreshInterval: 0,
-  });
+  const opts = { ...SWR_BASE, refreshInterval: 0 };
+  const { data: races0 }  = useSWR<Session[]>(`sessions?year=${year}&session_type=Race`,       fetcher, opts);
+  const { data: quali0 }  = useSWR<Session[]>(`sessions?year=${year}&session_type=Qualifying`,  fetcher, opts);
+  const { data: races1 }  = useSWR<Session[]>(`sessions?year=${year + 1}&session_type=Race`,    fetcher, opts);
+  const { data: quali1 }  = useSWR<Session[]>(`sessions?year=${year + 1}&session_type=Qualifying`, fetcher, opts);
   return useMemo(() => {
-    return [...(y0 ?? []), ...(y1 ?? [])].sort((a, b) => a.date_start.localeCompare(b.date_start));
-  }, [y0, y1]);
+    return [
+      ...(races0 ?? []), ...(quali0 ?? []),
+      ...(races1 ?? []), ...(quali1 ?? []),
+    ].sort((a, b) => a.date_start.localeCompare(b.date_start));
+  }, [races0, quali0, races1, quali1]);
 }
 
 export function useWeather(sessionKey: number | null) {

@@ -100,6 +100,21 @@ export default function Home() {
 
   const stints = useStints(sessionKey, currentLap);
 
+  // ── Qualifying state ───────────────────────────────────────────────────────────
+  const isQualifying = session?.session_type === "Qualifying";
+
+  const qualifyingState = useMemo(() => {
+    if (!isQualifying) return null;
+    const bestLaps = new Map<number, typeof allLaps[0]>();
+    for (const lap of allLaps) {
+      if (!lap.lap_duration || lap.is_pit_out_lap) continue;
+      const ex = bestLaps.get(lap.driver_number);
+      if (!ex || (ex.lap_duration ?? Infinity) > lap.lap_duration) bestLaps.set(lap.driver_number, lap);
+    }
+    const completedPhases = Math.min(raceControl.filter(m => m.flag === "CHEQUERED").length, 3);
+    return { bestLaps, completedPhases };
+  }, [isQualifying, allLaps, raceControl]);
+
   // ── Fastest lap ───────────────────────────────────────────────────────────────
   const fastestLap = useMemo(() => {
     return allLaps.reduce<typeof allLaps[0] | null>((best, lap) => {
@@ -326,6 +341,9 @@ export default function Home() {
             favorites={favorites}
             onSelectDriver={handleSelectDriver}
             onToggleFavorite={toggleFavorite}
+            isQualifying={isQualifying}
+            qualiBestLaps={qualifyingState?.bestLaps}
+            qualiCompletedPhases={qualifyingState?.completedPhases}
           />
         </div>
 
