@@ -133,11 +133,20 @@ export default function Home() {
     }, null);
   }, [allLaps]);
 
-  // ── Track path — locked once circuit trace is stable (≥150 pts) ───────────────
-  const rawTrackPath = useReferenceTrack(sessionKey, useMemo(() => {
+  // ── P1 driver + representative lap (used for track fetch + sector fractions) ──
+  const p1DriverNumber = useMemo(() => {
     for (const [dn, pos] of positions.entries()) { if (pos.position === 1) return dn; }
     return drivers.size > 0 ? [...drivers.keys()][0] : null;
-  }, [positions, drivers]), effectiveQueryTime);
+  }, [positions, drivers]);
+
+  const p1Lap = useDriverLap(sessionKey, p1DriverNumber);
+  const sectorFractions = useMemo(() => {
+    if (!p1Lap?.lap_duration || !p1Lap.duration_sector_1 || !p1Lap.duration_sector_2) return null;
+    return { s1: p1Lap.duration_sector_1 / p1Lap.lap_duration, s2: p1Lap.duration_sector_2 / p1Lap.lap_duration };
+  }, [p1Lap]);
+
+  // ── Track path — fetched for exactly one reference lap ─────────────────────
+  const rawTrackPath = useReferenceTrack(sessionKey, p1DriverNumber, effectiveQueryTime, p1Lap);
 
   const [lockedTrack, setLockedTrack] = useState(rawTrackPath);
   const prevSessionKeyRef = useRef<number | null>(null);
@@ -154,17 +163,6 @@ export default function Home() {
   }, [rawTrackPath, sessionKey]);
 
   const trackPath = lockedTrack.length >= 150 ? lockedTrack : rawTrackPath;
-
-  const p1DriverNumber = useMemo(() => {
-    for (const [dn, pos] of positions.entries()) { if (pos.position === 1) return dn; }
-    return drivers.size > 0 ? [...drivers.keys()][0] : null;
-  }, [positions, drivers]);
-
-  const p1Lap = useDriverLap(sessionKey, p1DriverNumber);
-  const sectorFractions = useMemo(() => {
-    if (!p1Lap?.lap_duration || !p1Lap.duration_sector_1 || !p1Lap.duration_sector_2) return null;
-    return { s1: p1Lap.duration_sector_1 / p1Lap.lap_duration, s2: p1Lap.duration_sector_2 / p1Lap.lap_duration };
-  }, [p1Lap]);
 
   // ── Battle detection ───────────────────────────────────────────────────────────
   const battles = useMemo(() => {

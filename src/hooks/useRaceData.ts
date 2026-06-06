@@ -173,26 +173,38 @@ export function useLocations(sessionKey: number | null, currentTime?: string | n
   }, [data]);
 }
 
-// Single driver's sorted location data — produces a clean circuit trace
-// unlike the old useTrackPath that mixed all 20 drivers and created a tangled path.
+// Single driver's sorted location data — produces a clean circuit trace.
+// When a reference lap is supplied its exact time window is used so only
+// one lap of GPS data is fetched, avoiding multi-lap overlay artefacts.
 export function useReferenceTrack(
   sessionKey: number | null,
   driverNumber: number | null,
-  currentTime?: string | null
+  currentTime?: string | null,
+  refLap?: { date_start: string; lap_duration: number | null } | null
 ) {
   const live = !currentTime;
-  // Large window so we always capture a full circuit trace without rolling drift.
-  // Historical mode has no lower bound so every lap is represented.
-  const key =
-    sessionKey && driverNumber
-      ? live
-        ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=7200`
-        : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date<=${currentTime}`
-      : null;
+
+  // Prefer a single-lap window when we have a reference lap with timing
+  const key = useMemo(() => {
+    if (!sessionKey || !driverNumber) return null;
+    if (refLap?.date_start && refLap.lap_duration) {
+      const start = refLap.date_start;
+      const end = new Date(
+        new Date(start).getTime() + refLap.lap_duration * 1000 + 5_000
+      ).toISOString();
+      return `location?session_key=${sessionKey}&driver_number=${driverNumber}&date>=${start}&date<=${end}`;
+    }
+    // Fallback: large live window or full historical fetch
+    return live
+      ? `location?session_key=${sessionKey}&driver_number=${driverNumber}&live_window=300`
+      : `location?session_key=${sessionKey}&driver_number=${driverNumber}&date<=${currentTime}`;
+  }, [sessionKey, driverNumber, refLap, live, currentTime]);
+
   const { data } = useSWR<Location[]>(key, fetcher, {
     ...SWR_BASE,
-    refreshInterval: live ? 60_000 : 0,
+    refreshInterval: live && !refLap ? 60_000 : 0,
   });
+
   return useMemo(() => {
     if (!data || data.length === 0) return [];
     const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
@@ -203,19 +215,6 @@ export function useReferenceTrack(
       const dx = sorted[i].x - prev.x;
       const dy = sorted[i].y - prev.y;
       if (dx * dx + dy * dy > 4) result.push(sorted[i]);
-    }
-    // Trim to one lap: once we've collected enough points (>300, ~600 m),
-    // stop as soon as the path returns within 25 m of its starting point.
-    // This prevents multi-lap GPS traces drawing the circuit multiple times
-    // in different sector colors.
-    if (result.length > 300) {
-      const sx = result[0].x, sy = result[0].y;
-      for (let i = 300; i < result.length; i++) {
-        const dx = result[i].x - sx, dy = result[i].y - sy;
-        if (dx * dx + dy * dy < 625) { // 25 m radius
-          return result.slice(0, i + 1);
-        }
-      }
     }
     return result;
   }, [data]);
