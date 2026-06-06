@@ -148,7 +148,7 @@ export default function Home() {
       setLockedTrack([]);
       return;
     }
-    if (lockedTrack.length < 150 && rawTrackPath.length >= 150) {
+    if (rawTrackPath.length >= 150) {
       setLockedTrack(rawTrackPath);
     }
   }, [rawTrackPath, sessionKey]);

@@ -48,14 +48,13 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: [number, number][]) {
   ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
 }
 
-// Sector overlay colors — drawn on top of the dark base track
-const SECTOR_S1 = "#1b6ca8"; // steel blue
-const SECTOR_S2 = "#c47d0e"; // amber
-const SECTOR_S3 = "#8b31cc"; // violet
-// Legend label colors (brighter, for the corner key)
-const LEGEND_S1 = "#6ab0e8";
-const LEGEND_S2 = "#f5a84a";
-const LEGEND_S3 = "#c084fc";
+// Sector overlay colors
+const SECTOR_S1 = "#7c8fa6"; // cool grey
+const SECTOR_S2 = "#f59e0b"; // amber
+const SECTOR_S3 = "#c084fc"; // lavender
+const LEGEND_S1 = SECTOR_S1;
+const LEGEND_S2 = SECTOR_S2;
+const LEGEND_S3 = SECTOR_S3;
 
 const LERP = 0.1;
 
@@ -74,25 +73,24 @@ function drawTrack(
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   tracePath(ctx, pts); ctx.stroke();
 
-  // ── Layer 2: dark base track — always drawn, full width ───────────────────
-  ctx.beginPath(); ctx.strokeStyle = "#252525"; ctx.lineWidth = 9;
+  // ── Layer 2: dark asphalt base — always drawn ─────────────────────────────
+  ctx.beginPath(); ctx.strokeStyle = "#1d1d1d"; ctx.lineWidth = 9;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   tracePath(ctx, pts); ctx.stroke();
 
-  // ── Layer 3: sector color overlays — narrower, sits inside the base ───────
-  // Always has a dark base underneath so a bad slice never hides the track.
+  // ── Layer 3: thin sector color overlays ──────────────────────────────────
   if (sectorFractions) {
     const s1e = Math.min(Math.floor(n * sectorFractions.s1), n - 1);
     const s2e = Math.min(Math.floor(n * (sectorFractions.s1 + sectorFractions.s2)), n - 1);
-    ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (const { slice, color } of [
       { slice: pts.slice(0, s1e + 1) as [number, number][], color: SECTOR_S1 },
       { slice: pts.slice(s1e, s2e + 1) as [number, number][], color: SECTOR_S2 },
       { slice: pts.slice(s2e) as [number, number][], color: SECTOR_S3 },
     ]) {
       if (slice.length < 2) continue;
-      ctx.beginPath(); ctx.strokeStyle = color;
-      tracePath(ctx, slice); ctx.stroke();
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      tracePath(ctx, slice); ctx.stroke(); ctx.globalAlpha = 1;
     }
   }
 
