@@ -48,13 +48,13 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: [number, number][]) {
   ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
 }
 
-// Track surface colors — deep tints per sector, visible on dark background
-const TRACK_S1 = "#1e4a6a"; // steel blue
-const TRACK_S2 = "#5c3600"; // dark amber
-const TRACK_S3 = "#3a1060"; // deep violet
-// Legend label colors — brighter, for the corner key
-const LEGEND_S1 = "#7c8fa6";
-const LEGEND_S2 = "#f59e0b";
+// Sector overlay colors — drawn on top of the dark base track
+const SECTOR_S1 = "#1b6ca8"; // steel blue
+const SECTOR_S2 = "#c47d0e"; // amber
+const SECTOR_S3 = "#8b31cc"; // violet
+// Legend label colors (brighter, for the corner key)
+const LEGEND_S1 = "#6ab0e8";
+const LEGEND_S2 = "#f5a84a";
 const LEGEND_S3 = "#c084fc";
 
 const LERP = 0.1;
@@ -74,24 +74,26 @@ function drawTrack(
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   tracePath(ctx, pts); ctx.stroke();
 
-  // ── Layer 2: track surface — colored per sector ───────────────────────────
-  ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 9;
+  // ── Layer 2: dark base track — always drawn, full width ───────────────────
+  ctx.beginPath(); ctx.strokeStyle = "#252525"; ctx.lineWidth = 9;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  tracePath(ctx, pts); ctx.stroke();
 
+  // ── Layer 3: sector color overlays — narrower, sits inside the base ───────
+  // Always has a dark base underneath so a bad slice never hides the track.
   if (sectorFractions) {
     const s1e = Math.min(Math.floor(n * sectorFractions.s1), n - 1);
     const s2e = Math.min(Math.floor(n * (sectorFractions.s1 + sectorFractions.s2)), n - 1);
+    ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (const { slice, color } of [
-      { slice: pts.slice(0, s1e + 1) as [number, number][], color: TRACK_S1 },
-      { slice: pts.slice(s1e, s2e + 1) as [number, number][], color: TRACK_S2 },
-      { slice: pts.slice(s2e) as [number, number][], color: TRACK_S3 },
+      { slice: pts.slice(0, s1e + 1) as [number, number][], color: SECTOR_S1 },
+      { slice: pts.slice(s1e, s2e + 1) as [number, number][], color: SECTOR_S2 },
+      { slice: pts.slice(s2e) as [number, number][], color: SECTOR_S3 },
     ]) {
       if (slice.length < 2) continue;
       ctx.beginPath(); ctx.strokeStyle = color;
       tracePath(ctx, slice); ctx.stroke();
     }
-  } else {
-    ctx.beginPath(); ctx.strokeStyle = "#2a2a2a";
-    tracePath(ctx, pts); ctx.stroke();
   }
 
   // ── Direction of travel chevron (~7% along track) ─────────────────────────
@@ -334,9 +336,9 @@ export default function TrackVisual({
   };
 
   const LEGEND = [
-    { label: "S1", track: TRACK_S1, text: LEGEND_S1 },
-    { label: "S2", track: TRACK_S2, text: LEGEND_S2 },
-    { label: "S3", track: TRACK_S3, text: LEGEND_S3 },
+    { label: "S1", swatch: SECTOR_S1, text: LEGEND_S1 },
+    { label: "S2", swatch: SECTOR_S2, text: LEGEND_S2 },
+    { label: "S3", swatch: SECTOR_S3, text: LEGEND_S3 },
   ];
 
   return (
@@ -349,9 +351,9 @@ export default function TrackVisual({
       )}
       {/* Sector legend */}
       <div className="absolute top-3 right-3 z-10 flex flex-col gap-1 pointer-events-none">
-        {LEGEND.map(({ label, track, text }) => (
+        {LEGEND.map(({ label, swatch, text }) => (
           <div key={label} className="flex items-center gap-1.5">
-            <span className="w-4 h-2 rounded-sm shrink-0" style={{ backgroundColor: track }} />
+            <span className="w-4 h-2 rounded-sm shrink-0" style={{ backgroundColor: swatch }} />
             <span className="text-[9px] font-mono font-bold opacity-80" style={{ color: text }}>{label}</span>
           </div>
         ))}
