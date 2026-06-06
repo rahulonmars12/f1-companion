@@ -204,6 +204,19 @@ export function useReferenceTrack(
       const dy = sorted[i].y - prev.y;
       if (dx * dx + dy * dy > 4) result.push(sorted[i]);
     }
+    // Trim to one lap: once we've collected enough points (>300, ~600 m),
+    // stop as soon as the path returns within 25 m of its starting point.
+    // This prevents multi-lap GPS traces drawing the circuit multiple times
+    // in different sector colors.
+    if (result.length > 300) {
+      const sx = result[0].x, sy = result[0].y;
+      for (let i = 300; i < result.length; i++) {
+        const dx = result[i].x - sx, dy = result[i].y - sy;
+        if (dx * dx + dy * dy < 625) { // 25 m radius
+          return result.slice(0, i + 1);
+        }
+      }
+    }
     return result;
   }, [data]);
 }
