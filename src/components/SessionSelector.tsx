@@ -26,9 +26,12 @@ export default function SessionSelector({ currentSession, onSelect, onClose }: S
   const allSessions = useSessionsList();
   const [filter, setFilter] = useState<"Race" | "All">("Race");
   const [search, setSearch] = useState("");
+  const nowMs = useMemo(() => Date.now(), []);
 
   const filtered = useMemo(() => {
     return allSessions.filter((s) => {
+      // Only show sessions that have already started
+      if (new Date(s.date_start).getTime() > nowMs) return false;
       if (filter === "Race" && s.session_type !== "Race") return false;
       if (search) {
         const q = search.toLowerCase();
@@ -41,7 +44,7 @@ export default function SessionSelector({ currentSession, onSelect, onClose }: S
       }
       return true;
     });
-  }, [allSessions, filter, search]);
+  }, [allSessions, filter, search, nowMs]);
 
   // Group by year → meeting (country+circuit)
   const grouped = useMemo(() => {

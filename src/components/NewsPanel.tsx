@@ -1,31 +1,93 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Session } from "@/lib/openf1";
 import { useCalendar, useDriverStandings, useConstructorStandings } from "@/hooks/useRaceData";
 import { getTeamColor } from "@/lib/constants";
 
-function sessionLabel(s: Session) {
-  if (s.session_type === "Qualifying") return "QUAL";
-  if (s.session_type === "Race") return "RACE";
-  return s.session_type.toUpperCase().slice(0, 4);
+// ── Session badge helpers ──────────────────────────────────────────────────────
+
+function sessionBadge(s: Session): { label: string; text: string; bg: string; border: string } {
+  const name = s.session_name;
+  let label: string;
+  if (name === "Practice 1") label = "FP1";
+  else if (name === "Practice 2") label = "FP2";
+  else if (name === "Practice 3") label = "FP3";
+  else if (name.includes("Practice")) label = "FP";
+  else if (s.session_type === "Qualifying") label = "QUAL";
+  else if (s.session_type === "Race") label = "RACE";
+  else if (name === "Sprint") label = "SPR";
+  else if (name === "Sprint Qualifying") label = "SQ";
+  else label = s.session_type.slice(0, 4).toUpperCase();
+
+  if (s.session_type === "Race")        return { label, text: "#e8002d", bg: "#e8002d18", border: "#e8002d40" };
+  if (s.session_type === "Qualifying")  return { label, text: "#f59e0b", bg: "#f59e0b18", border: "#f59e0b40" };
+  if (name.includes("Practice"))       return { label, text: "#14b8a6", bg: "#14b8a618", border: "#14b8a640" };
+  return                                       { label, text: "#60a5fa", bg: "#60a5fa18", border: "#60a5fa40" };
 }
 
-function sessionLabelColor(s: Session) {
-  if (s.session_type === "Qualifying") return { text: "#f59e0b", bg: "#f59e0b18", border: "#f59e0b40" };
-  return { text: "#e8002d", bg: "#e8002d18", border: "#e8002d40" };
+function nextEventLabel(s: Session): string {
+  const name = s.session_name;
+  if (name === "Practice 1") return "Next FP1";
+  if (name === "Practice 2") return "Next FP2";
+  if (name === "Practice 3") return "Next FP3";
+  if (s.session_type === "Qualifying") return "Next Qualifying";
+  if (s.session_type === "Race") return "Next Race";
+  if (name === "Sprint") return "Next Sprint";
+  return "Next Session";
 }
+
+function timeUntil(s: Session, now: Date): string {
+  const diff = new Date(s.date_start).getTime() - now.getTime();
+  if (diff <= 0) return "NOW";
+  const days  = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins  = Math.floor((diff % 3_600_000) / 60_000);
+  if (days >= 2) return `${days}d`;
+  if (days === 1) return `1d ${hours}h`;
+  return `${hours}h ${String(mins).padStart(2, "0")}m`;
+}
+
+// ── Weekend grouping ───────────────────────────────────────────────────────────
+
+type WeekendGroup = {
+  key: string;
+  country: string;
+  circuit: string;
+  sessions: Session[];
+};
+
+function groupByWeekend(sessions: Session[]): WeekendGroup[] {
+  const map = new Map<string, WeekendGroup>();
+  for (const s of sessions) {
+    const key = `${s.year}__${s.country_name}__${s.circuit_short_name}`;
+    if (!map.has(key)) map.set(key, { key, country: s.country_name, circuit: s.circuit_short_name, sessions: [] });
+    map.get(key)!.sessions.push(s);
+  }
+  for (const wk of map.values()) {
+    wk.sessions.sort((a, b) => a.date_start.localeCompare(b.date_start));
+  }
+  return [...map.values()];
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function NewsPanel() {
   const calendar = useCalendar();
   const driverStandings = useDriverStandings();
   const constructorStandings = useConstructorStandings();
-  const now = useMemo(() => new Date(), []);
+
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const upcoming = useMemo(
     () => calendar.filter(s => new Date(s.date_start) > now),
     [calendar, now]
   );
+
   const nextEvent = upcoming[0] ?? null;
 
   const countdown = useMemo(() => {
@@ -34,21 +96,24 @@ export default function NewsPanel() {
     if (diff <= 0) return null;
     const days  = Math.floor(diff / 86_400_000);
     const hours = Math.floor((diff % 86_400_000) / 3_600_000);
-    const mins  = Math.floor((diff % 3_600_000)  / 60_000);
-    const secs  = Math.floor((diff % 60_000)      / 1_000);
-    return { days, hours, mins, secs, subDay: days === 0 };
+    const mins  = Math.floor((diff % 3_600_000) / 60_000);
+    return { days, hours, mins, subDay: days === 0 };
   }, [nextEvent, now]);
+
+  const weekends = useMemo(() => groupByWeekend(upcoming).slice(0, 5), [upcoming]);
+
+  const nextBadge = nextEvent ? sessionBadge(nextEvent) : null;
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-f1-dark scrollbar-thin">
 
-      {/* Next event countdown */}
-      {nextEvent && countdown && (
+      {/* ── Next event countdown ────────────────────────────────────────────── */}
+      {nextEvent && countdown && nextBadge && (
         <div className="mx-3 mt-3 rounded-xl border border-f1-border overflow-hidden">
           <div className="border-b border-f1-border/50 px-4 py-2 flex items-center gap-2">
             <span className="text-[9px] font-mono uppercase tracking-widest font-bold"
-              style={{ color: sessionLabelColor(nextEvent).text }}>
-              {nextEvent.session_type === "Qualifying" ? "Next Qualifying" : "Next Race"}
+              style={{ color: nextBadge.text }}>
+              {nextEventLabel(nextEvent)}
             </span>
           </div>
           <div className="px-4 py-3">
@@ -60,7 +125,6 @@ export default function NewsPanel() {
             </div>
 
             {countdown.subDay ? (
-              /* Under 24 h — show HH:MM */
               <div className="flex flex-col items-center gap-1">
                 <div className="text-white font-mono font-black tabular-nums"
                   style={{ fontSize: 44, lineHeight: 1, letterSpacing: "-0.02em" }}>
@@ -73,7 +137,6 @@ export default function NewsPanel() {
                 </div>
               </div>
             ) : (
-              /* Multi-day — show boxes */
               <div className="flex gap-3">
                 {[
                   { value: countdown.days,  label: "DAYS" },
@@ -102,53 +165,57 @@ export default function NewsPanel() {
         </div>
       )}
 
-      {/* Upcoming calendar */}
+      {/* ── Upcoming calendar — grouped by race weekend ────────────────────── */}
       <div className="px-4 pt-3 pb-2">
         <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
           Upcoming
         </div>
-        <div className="flex flex-col gap-1.5">
-          {upcoming.slice(0, 7).map(s => {
-            const d = new Date(s.date_start);
-            const diff = d.getTime() - now.getTime();
-            const days  = Math.floor(diff / 86_400_000);
-            const hours = Math.floor((diff % 86_400_000) / 3_600_000);
-            const lbl = sessionLabelColor(s);
-            return (
-              <div key={s.session_key}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-f1-border/40">
-                {/* Session type badge */}
-                <span
-                  className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0"
-                  style={{ color: lbl.text, backgroundColor: lbl.bg, border: `1px solid ${lbl.border}` }}
-                >
-                  {sessionLabel(s)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-xs font-mono font-bold truncate">
-                    {s.circuit_short_name}
-                  </div>
-                  <div className="text-f1-muted text-[9px] font-mono">{s.country_name}</div>
+        {weekends.length === 0 ? (
+          <div className="text-f1-muted text-xs font-mono py-2">Loading…</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {weekends.map(wk => (
+              <div key={wk.key} className="rounded-lg border border-f1-border/40 overflow-hidden">
+                {/* Weekend header */}
+                <div className="px-3 py-2 bg-white/[0.03] border-b border-f1-border/40 flex items-center gap-2">
+                  <span className="text-white text-[10px] font-mono font-bold flex-1">{wk.circuit}</span>
+                  <span className="text-f1-muted text-[9px] font-mono">{wk.country}</span>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="font-mono font-bold text-[10px]" style={{ color: lbl.text }}>
-                    {days === 0
-                      ? `${String(hours).padStart(2, "0")}h`
-                      : days === 1
-                      ? "TOMORROW"
-                      : `${days}d`}
-                  </div>
-                  <div className="text-f1-muted text-[9px] font-mono">
-                    {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </div>
-                </div>
+                {/* Session rows */}
+                {wk.sessions.map(s => {
+                  const badge = sessionBadge(s);
+                  const d = new Date(s.date_start);
+                  return (
+                    <div key={s.session_key}
+                      className="flex items-center gap-2.5 px-3 py-2 border-b border-f1-border/20 last:border-0">
+                      <span
+                        className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 w-9 text-center"
+                        style={{ color: badge.text, backgroundColor: badge.bg, border: `1px solid ${badge.border}` }}
+                      >
+                        {badge.label}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-f1-muted text-[9px] font-mono">
+                          {d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                        </span>
+                        <span className="text-f1-muted/50 text-[9px] font-mono ml-1">
+                          {d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-[10px] shrink-0 tabular-nums"
+                        style={{ color: badge.text }}>
+                        {timeUntil(s, now)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Driver championship standings */}
+      {/* ── Driver championship standings ───────────────────────────────────── */}
       <div className="px-4 pb-2 border-t border-f1-border/50 pt-3">
         <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
           Championship · Drivers
@@ -182,7 +249,7 @@ export default function NewsPanel() {
         )}
       </div>
 
-      {/* Constructor championship standings */}
+      {/* ── Constructor championship standings ─────────────────────────────── */}
       <div className="px-4 pb-6 border-t border-f1-border/50 pt-3">
         <div className="text-[10px] font-mono font-bold tracking-widest text-f1-muted uppercase mb-2">
           Championship · Constructors
