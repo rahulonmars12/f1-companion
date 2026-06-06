@@ -100,6 +100,15 @@ export default function Home() {
 
   const stints = useStints(sessionKey, currentLap);
 
+  // ── Live session detection ─────────────────────────────────────────────────────
+  const isActuallyLive = useMemo(() => {
+    if (!liveSession) return false;
+    const now = Date.now();
+    const start = new Date(liveSession.date_start).getTime();
+    const end = liveSession.date_end ? new Date(liveSession.date_end).getTime() : start + 7_200_000;
+    return now >= start - 600_000 && now <= end + 1_800_000;
+  }, [liveSession]);
+
   // ── Qualifying state ───────────────────────────────────────────────────────────
   const isQualifying = session?.session_type === "Qualifying";
 
@@ -321,7 +330,9 @@ export default function Home() {
         session={session}
         raceControl={raceControl}
         isHistorical={currentTime !== null}
+        hasLiveSession={isActuallyLive}
         onOpenPicker={() => setShowPicker(true)}
+        onGoLive={handleGoLive}
       />
 
       <main className="flex-1 flex overflow-hidden min-h-0">

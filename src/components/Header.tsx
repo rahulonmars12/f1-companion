@@ -7,10 +7,12 @@ interface HeaderProps {
   session: Session | null;
   raceControl: RaceControl[];
   isHistorical?: boolean;
+  hasLiveSession?: boolean;
   onOpenPicker?: () => void;
+  onGoLive?: () => void;
 }
 
-export default function Header({ session, raceControl, isHistorical, onOpenPicker }: HeaderProps) {
+export default function Header({ session, raceControl, isHistorical, hasLiveSession, onOpenPicker, onGoLive }: HeaderProps) {
   const latestFlag = raceControl.find((m) => m.flag && m.category === "Flag");
   const flagColor = latestFlag?.flag ? FLAG_COLORS[latestFlag.flag] ?? "#39b54a" : "#39b54a";
   const flagLabel = latestFlag?.flag ? FLAG_LABELS[latestFlag.flag] ?? latestFlag.flag : "CLEAR";
@@ -78,23 +80,24 @@ export default function Header({ session, raceControl, isHistorical, onOpenPicke
         )}
 
         {/* Live / Replay badge */}
-        <div className="flex items-center gap-1.5">
-          {isHistorical ? (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />
-              <span className="text-yellow-500 text-[10px] font-mono font-bold tracking-widest hidden sm:block">
-                REPLAY
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-f1-red animate-pulse shrink-0" />
-              <span className="text-f1-red text-[10px] font-mono font-bold tracking-widest hidden sm:block">
-                LIVE
-              </span>
-            </>
-          )}
-        </div>
+        {hasLiveSession ? (
+          <button
+            onClick={onGoLive}
+            className="flex items-center gap-1.5 hover:opacity-70 active:scale-95 transition-all"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-f1-red animate-pulse shrink-0" />
+            <span className="text-f1-red text-[10px] font-mono font-bold tracking-widest hidden sm:block">
+              LIVE
+            </span>
+          </button>
+        ) : isHistorical ? (
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />
+            <span className="text-yellow-500 text-[10px] font-mono font-bold tracking-widest hidden sm:block">
+              REPLAY
+            </span>
+          </div>
+        ) : null}
       </div>
     </header>
   );

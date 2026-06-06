@@ -60,9 +60,10 @@ export default function StandingsPanel({
     const phaseLabel = phases >= 3 ? "FINAL" : phases === 2 ? "Q3" : phases === 1 ? "Q2" : "Q1";
     const phaseColor = phases >= 3 ? "#22c55e" : phases === 2 ? "#ffd700" : "#e8002d";
 
-    // P1 best time (reference for deltas)
+    // P1 best lap (reference for time + sector deltas)
     const p1 = sorted.find(p => p.position === 1);
-    const p1Best = p1 ? qualiBestLaps.get(p1.driver_number)?.lap_duration ?? null : null;
+    const p1BestLap = p1 ? qualiBestLaps.get(p1.driver_number) ?? null : null;
+    const p1Best = p1BestLap?.lap_duration ?? null;
 
     // Groups
     const q3drivers  = sorted.filter(p => p.position <= 10);
@@ -79,6 +80,7 @@ export default function StandingsPanel({
           driver={d}
           bestLap={best}
           p1BestTime={p1Best}
+          p1BestLap={p1BestLap}
           isSelected={selectedDriver === pos.driver_number}
           isFavorite={favorites.includes(pos.driver_number)}
           onSelect={onSelectDriver}
@@ -202,14 +204,17 @@ function QualySectionHeader({ label, color }: { label: string; color: string }) 
 
 // ── Qualifying row ───────────────────────────────────────────────────────────
 
+const SECTOR_COLORS = { s1: "#7c8fa6", s2: "#f59e0b", s3: "#c084fc" } as const;
+
 function QualifyingRow({
-  pos, driver, bestLap, p1BestTime,
+  pos, driver, bestLap, p1BestTime, p1BestLap,
   isSelected, isFavorite, onSelect, onToggleFav,
 }: {
   pos: Position;
   driver: Driver | undefined;
   bestLap: Lap | undefined;
   p1BestTime: number | null;
+  p1BestLap: Lap | null;
   isSelected: boolean;
   isFavorite: boolean;
   onSelect: (n: number) => void;
@@ -230,6 +235,21 @@ function QualifyingRow({
     : isP1
     ? "#ffd700"
     : "#888";
+
+  // Per-sector display: absolute for P1, delta for others
+  const sectors = [
+    { label: "S1", color: SECTOR_COLORS.s1, val: bestLap?.duration_sector_1 ?? null, p1val: p1BestLap?.duration_sector_1 ?? null },
+    { label: "S2", color: SECTOR_COLORS.s2, val: bestLap?.duration_sector_2 ?? null, p1val: p1BestLap?.duration_sector_2 ?? null },
+    { label: "S3", color: SECTOR_COLORS.s3, val: bestLap?.duration_sector_3 ?? null, p1val: p1BestLap?.duration_sector_3 ?? null },
+  ].map(({ label, color, val, p1val }) => {
+    if (val === null) return { label, color, text: "—", textColor: "#333" };
+    if (isP1 || p1val === null) {
+      return { label, color, text: val.toFixed(3), textColor: color };
+    }
+    const delta = val - p1val;
+    const textColor = delta < -0.001 ? "#22c55e" : delta > 0.1 ? "#ef4444" : "#666";
+    return { label, color, text: (delta >= 0 ? "+" : "") + delta.toFixed(3), textColor };
+  });
 
   return (
     <div
@@ -256,15 +276,24 @@ function QualifyingRow({
         </span>
 
         {/* Team stripe */}
-        <span className="w-0.5 h-7 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
+        <span className="w-0.5 h-9 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
 
-        {/* Driver name */}
+        {/* Driver name + sectors */}
         <div className="flex-1 min-w-0">
           <div className="text-white text-sm font-mono font-bold tracking-wide leading-none">
             {driver?.name_acronym ?? `#${pos.driver_number}`}
           </div>
           <div className="text-f1-muted text-[9px] font-mono mt-0.5 truncate">
             {driver?.team_name ?? ""}
+          </div>
+          {/* Sector times row */}
+          <div className="flex items-center gap-2 mt-1">
+            {sectors.map(({ label, color, text, textColor }) => (
+              <div key={label} className="flex items-center gap-0.5">
+                <span className="font-mono font-bold" style={{ fontSize: 7, color }}>{label}</span>
+                <span className="font-mono tabular-nums" style={{ fontSize: 8, color: textColor }}>{text}</span>
+              </div>
+            ))}
           </div>
         </div>
 

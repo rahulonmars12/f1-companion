@@ -110,11 +110,6 @@ function drawTrack(
       ctx.fillStyle = color; ctx.globalAlpha = 0.85;
       ctx.fillText(label, bx + outNx * 13, by + outNy * 13); ctx.globalAlpha = 1;
     }
-  } else {
-    // No sector data — subtle grey surface
-    ctx.beginPath(); ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 3.5;
-    ctx.globalAlpha = 0.7; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    tracePath(ctx, pts); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
   // ── Direction of travel chevron (~7% along track) ─────────────────────────
@@ -164,6 +159,8 @@ export default function TrackVisual({
   const displayRawRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const rafRef = useRef<number>(0);
 
+  const lastSeenMsRef = useRef<Map<number, number>>(new Map());
+
   const driversRef = useRef(drivers);
   const selectedDriverRef = useRef(selectedDriver);
   const battlesRef = useRef(battles);
@@ -186,10 +183,11 @@ export default function TrackVisual({
     return () => ro.disconnect();
   }, []);
 
-  // Update target positions
+  // Update target positions and staleness timestamps
   useEffect(() => {
     for (const [dn, loc] of liveLocations.entries()) {
       targetRawRef.current.set(dn, { x: loc.x, y: loc.y });
+      lastSeenMsRef.current.set(dn, new Date(loc.date).getTime());
       if (!displayRawRef.current.has(dn))
         displayRawRef.current.set(dn, { x: loc.x, y: loc.y });
     }
@@ -258,8 +256,15 @@ export default function TrackVisual({
               ctx.drawImage(offscreen, 0, 0, w, h);
               const battleSet = new Set(battlesRef.current.flatMap(b => [b.attacker, b.defender]));
 
+              // Compute max last-seen timestamp to detect retired/DNS drivers
+              const lastSeenValues = [...lastSeenMsRef.current.values()];
+              const maxLastSeen = lastSeenValues.length > 0 ? Math.max(...lastSeenValues) : 0;
+
               for (const [dn, raw] of displayRawRef.current.entries()) {
                 if (!targetRawRef.current.has(dn)) continue;
+                // Skip DNF/DNS: location >60 s stale relative to most-active driver
+                const lastSeen = lastSeenMsRef.current.get(dn) ?? 0;
+                if (lastSeen === 0 || maxLastSeen - lastSeen > 60_000) continue;
                 const driver = driversRef.current.get(dn);
                 if (!driver) continue;
 
