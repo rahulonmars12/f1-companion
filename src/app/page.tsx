@@ -369,6 +369,7 @@ export default function Home() {
             carData={carData}
             selectedDriver={panelMode.type === "driver" ? panelMode.driverNumber : null}
             battles={battles}
+            favorites={favorites}
             onSelectDriver={handleSelectDriver}
           />
         </div>
